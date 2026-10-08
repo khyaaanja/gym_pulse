@@ -1,0 +1,448 @@
+Risk report
+
+29 Sept 2026 · from imported records · risk-engine-v1.0
+
+Next 30 days · estimated member loss
+
+5–16
+
+Estimated range. Confidence: Moderate. Based on 29 members and 1,798 attendance records (1 Jul 2026 – 29 Sept 2026).
+
+Active members
+27
+Estimated at risk
+6–17
+High / critical risk
+13
+Memberships expiring
+24
+What is driving the estimate?
+24
+members are approaching expiry within 30 days
+20
+members have significant attendance decline (40%+ fewer visits than the previous 30 days)
+13
+members have gone 10+ days without a visit
+13
+high-risk members have never renewed before
+Scenarios
+
+Estimates only — not promises.
+
+If the current pattern continues
+
+5–16 members lost
+
+If at-risk members are contacted
+
+Not enough recovery history yet
+
+Not enough recovery history yet — we'll estimate this once at least 10 contacted members have an outcome (you have 0).
+
+Estimated revenue at risk
+
+₹14,407–₹40,821/month
+
+Estimated members at risk × average monthly fee (₹2,401). Not all of this would be lost.
+
+How confident is this?
+3 months of attendance history
+Detailed visit records per member
+Clean imported data
+Not yet calibrated against real outcomes
+
+risk-engine-v1.0 — a transparent, rules-based score from attendance frequency and trend, days since last visit, visit gaps, membership expiry and renewal history. No personal or sensitive attributes are used. Likelihoods are not yet calibrated against real outcomes, so ranges are deliberately wide. Generated 29 Sept 2026.
+
+Members
+
+Sorted by estimated risk. Tap Why? for the reasons behind each estimate.
+
+All
+Critical
+High
+Moderate
+Low
+Member	Estimate	Last visit	Visits (30d vs prior)	Expiry	Fee / month	
+Actions
+
+Puja Lama
+Why?
+• 22 days since last visit
+• Attendance dropped 88% in the last 30 days (8 → 1 visits)
+• Membership expires in 6 days
+• Current gap of 22 days vs. a usual 4.5 days between visits
+• Hasn't renewed before (member for 86 days)
+• Previous average: 1.5 visits/week · Current average: 0.2 visits/week
+
+Recommended: Contact member today
+
+	Est. critical attention
+score 82
+	22d ago	1 vs 8	in 6d	₹2,500	Start recovery
+Sunita KC
+Why?
+• 25 days since last visit
+• Attendance dropped 94% in the last 30 days (18 → 1 visits)
+• Membership expires in 5 days
+• Current gap of 25 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 90 days)
+• Previous average: 4.9 visits/week · Current average: 0.2 visits/week
+
+Recommended: Contact member today
+
+	Est. critical attention
+score 80
+	25d ago	1 vs 18	in 5d	₹2,500	Start recovery
+Manisha Magar
+Why?
+• 50 days since last visit
+• Attendance dropped 100% in the last 30 days (8 → 0 visits)
+• Membership expires in 10 days
+• Current gap of 50 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 90 days)
+• Previous average: 3.2 visits/week · Current average: 0 visits/week
+
+Recommended: Contact member today
+
+	Est. critical attention
+score 76
+	50d ago	0 vs 8	in 10d	₹2,500	Start recovery
+Bibek Sharma
+Why?
+• 25 days since last visit
+• Attendance dropped 80% in the last 30 days (20 → 4 visits)
+• Membership expires in 8 days
+• Current gap of 25 days vs. a usual 1.6 days between visits
+• Hasn't renewed before (member for 90 days)
+• Previous average: 4.4 visits/week · Current average: 0.9 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 72
+	25d ago	4 vs 20	in 8d	₹2,500	Start recovery
+Gaurav Basnet
+Why?
+• 46 days since last visit
+• Attendance dropped 100% in the last 30 days (9 → 0 visits)
+• Current gap of 46 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 90 days)
+• Membership expires in 18 days
+• Previous average: 3.6 visits/week · Current average: 0 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 70
+	46d ago	0 vs 9	in 18d	₹2,167	Start recovery
+Nabin Rana
+Why?
+• 22 days since last visit
+• Attendance dropped 71% in the last 30 days (17 → 5 visits)
+• Membership expires in 14 days
+• Current gap of 22 days vs. a usual 1.6 days between visits
+• Hasn't renewed before (member for 90 days)
+• Previous average: 4.4 visits/week · Current average: 1.2 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 70
+	22d ago	5 vs 17	in 14d	₹2,167	Start recovery
+Samjhana Khadka
+Why?
+• 42 days since last visit
+• Attendance dropped 100% in the last 30 days (11 → 0 visits)
+• Current gap of 42 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 90 days)
+• Membership expires in 26 days
+• Previous average: 3.9 visits/week · Current average: 0 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 70
+	42d ago	0 vs 11	in 26d	₹2,500	Start recovery
+Kabita Bajracharya
+Why?
+• 23 days since last visit
+• Attendance dropped 67% in the last 30 days (18 → 6 visits)
+• Membership expires in 11 days
+• Current gap of 23 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 90 days)
+• Previous average: 4.6 visits/week · Current average: 1.4 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 69
+	23d ago	6 vs 18	in 11d	₹2,500	Start recovery
+Hari Bhandari
+Why?
+• 39 days since last visit
+• Attendance dropped 100% in the last 30 days (12 → 0 visits)
+• Current gap of 39 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 90 days)
+• Previous average: 4 visits/week · Current average: 0 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 66
+	39d ago	0 vs 12	—	—	Start recovery
+Pratima Shrestha
+Why?
+• 21 days since last visit
+• Attendance dropped 73% in the last 30 days (22 → 6 visits)
+• Current gap of 21 days vs. a usual 1.4 days between visits
+• Hasn't renewed before (member for 89 days)
+• Membership expires in 17 days
+• Previous average: 5.1 visits/week · Current average: 1.4 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 65
+	21d ago	6 vs 22	in 17d	₹2,500	Start recovery
+Sandeep Maharjan
+Why?
+• 21 days since last visit
+• Attendance dropped 67% in the last 30 days (18 → 6 visits)
+• Current gap of 21 days vs. a usual 1.6 days between visits
+• Hasn't renewed before (member for 88 days)
+• Membership expires in 20 days
+• Previous average: 4.5 visits/week · Current average: 1.4 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 63
+	21d ago	6 vs 18	in 20d	₹2,500	Start recovery
+Rita Gurung
+Why?
+• 19 days since last visit
+• Attendance dropped 61% in the last 30 days (18 → 7 visits)
+• Current gap of 19 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 90 days)
+• Membership expires in 23 days
+• Previous average: 4.6 visits/week · Current average: 1.6 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 61
+	19d ago	7 vs 18	in 23d	₹2,500	Start recovery
+Ashish Tamang
+Why?
+• 18 days since last visit
+• Attendance dropped 56% in the last 30 days (18 → 8 visits)
+• Current gap of 18 days vs. a usual 1.5 days between visits
+• Hasn't renewed before (member for 89 days)
+• Membership expires in 26 days
+• Previous average: 4.5 visits/week · Current average: 1.9 visits/week
+
+Recommended: Contact member within 2 days
+
+	Est. high risk
+score 58
+	18d ago	8 vs 18	in 26d	₹2,500	Start recovery
+Binita Karki
+Why?
+• Attendance dropped 83% in the last 30 days (23 → 4 visits)
+• 7 days since last visit
+• Current gap of 7 days vs. a usual 1.4 days between visits
+• Hasn't renewed before (member for 89 days)
+• Membership expires in 20 days
+• Previous average: 5.2 visits/week · Current average: 0.9 visits/week
+
+Recommended: Send a friendly check-in message
+
+	Est. moderate risk
+score 47
+	7d ago	4 vs 23	in 20d	₹2,500	Start recovery
+Laxmi Pandey
+Why?
+• Membership expires in 2 days
+• Attendance dropped 75% in the last 30 days (12 → 3 visits)
+• Hasn't renewed before (member for 88 days)
+• Previous average: 2.5 visits/week · Current average: 0.7 visits/week
+• 1 days since last visit
+
+Recommended: Send a friendly check-in message
+
+	Est. moderate risk
+score 41
+	1d ago	3 vs 12	in 2d	₹2,500	Start recovery
+Utsav Rai
+Why?
+• Attendance dropped 67% in the last 30 days (18 → 6 visits)
+• Current gap of 6 days vs. a usual 1.6 days between visits
+• 6 days since last visit
+• Hasn't renewed before (member for 89 days)
+• Previous average: 4.6 visits/week · Current average: 1.4 visits/week
+
+Recommended: Send a friendly check-in message
+
+	Est. moderate risk
+score 38
+	6d ago	6 vs 18	—	—	Start recovery
+Sabina Adhikari
+Why?
+• Attendance dropped 68% in the last 30 days (19 → 6 visits)
+• 5 days since last visit
+• Current gap of 5 days vs. a usual 1.6 days between visits
+• Hasn't renewed before (member for 90 days)
+• Membership expires in 30 days
+• Previous average: 4.4 visits/week · Current average: 1.4 visits/week
+
+Recommended: Send a friendly check-in message
+
+	Est. moderate risk
+score 37
+	5d ago	6 vs 19	in 30d	₹2,167	Start recovery
+Ramesh Thapa
+Why?
+• Attendance dropped 71% in the last 30 days (21 → 6 visits)
+• Current gap of 4 days vs. a usual 1.3 days between visits
+• 4 days since last visit
+• Hasn't renewed before (member for 90 days)
+• Membership expires in 25 days
+• Previous average: 5.4 visits/week · Current average: 1.4 visits/week
+
+Recommended: Send a friendly check-in message
+
+	Est. moderate risk
+score 36
+	4d ago	6 vs 21	in 25d	₹2,500	Start recovery
+Niraj Poudel
+Why?
+• Membership expires in 4 days
+• Attendance dropped 43% in the last 30 days (7 → 4 visits)
+• Hasn't renewed before (member for 79 days)
+• Previous average: 1.9 visits/week · Current average: 0.9 visits/week
+• 1 days since last visit
+
+Recommended: Send a friendly check-in message
+
+	Est. moderate risk
+score 30
+	1d ago	4 vs 7	in 4d	₹2,500	Start recovery
+Sagar Magar
+Why?
+• Attendance dropped 43% in the last 30 days (23 → 13 visits)
+• Hasn't renewed before (member for 90 days)
+• 1 days since last visit
+• Previous average: 5.3 visits/week · Current average: 3 visits/week
+
+Recommended: No action needed
+
+	Est. low risk
+score 16
+	1d ago	13 vs 23	—	—	Start recovery
+Shreya Bajracharya
+Why?
+• Hasn't renewed before (member for 16 days)
+• Membership expires in 14 days
+
+Recommended: No action needed
+
+	Est. low risk
+score 11
+	0d ago	12 vs 0	in 14d	₹2,500	Start recovery
+Bishal Sharma
+Why?
+• Hasn't renewed before (member for 15 days)
+• Membership expires in 13 days
+
+Recommended: No action needed
+
+	Est. low risk
+score 11
+	0d ago	14 vs 0	in 13d	₹2,500	Start recovery
+Rajesh Joshi
+Why?
+• Hasn't renewed before (member for 85 days)
+• Attendance dropped 16% in the last 30 days (19 → 16 visits)
+• 1 days since last visit
+
+Recommended: No action needed
+
+	Est. low risk
+score 11
+	1d ago	16 vs 19	—	—	Start recovery
+Manish Bhandari
+Why?
+• Hasn't renewed before (member for 90 days)
+• 2 days since last visit
+• Current gap of 2 days vs. a usual 1.5 days between visits
+
+Recommended: No action needed
+
+	Est. low risk
+score 10
+	2d ago	21 vs 21	—	—	Start recovery
+Anjali Tamang
+Why?
+• Hasn't renewed before (member for 89 days)
+• Membership expires in 27 days
+• Attendance dropped 10% in the last 30 days (20 → 18 visits)
+
+Recommended: No action needed
+
+	Est. low risk
+score 10
+	0d ago	18 vs 20	in 27d	₹2,500	Start recovery
+Kiran Khadka
+Why?
+• Hasn't renewed before (member for 90 days)
+• Attendance dropped 10% in the last 30 days (20 → 18 visits)
+• 1 days since last visit
+
+Recommended: No action needed
+
+	Est. low risk
+score 10
+	1d ago	18 vs 20	—	—	Start recovery
+Yogesh Rana
+Why?
+• Hasn't renewed before (member for 15 days)
+• Membership expires in 15 days
+• 1 days since last visit
+
+Recommended: No action needed
+
+	Est. low risk
+score 10
+	1d ago	11 vs 0	in 15d	₹2,167	Start recovery
+Prakash Thapa
+Why?
+• Hasn't renewed before (member for 90 days)
+• 1 days since last visit
+
+Recommended: No action needed
+
+	Est. low risk
+score 8
+	1d ago	18 vs 17	—	—	Start recovery
+Bikash Gurung
+Why?
+• Hasn't renewed before (member for 90 days)
+• Membership expires in 23 days
+
+Recommended: No action needed
+
+	Est. low risk
+score 8
+	0d ago	22 vs 22	in 23d	₹2,500	Start recovery
+Aarav Shrestha
+Why?
+• Hasn't renewed before (member for 90 days)
+• Membership expires in 15 days
+
+Recommended: No action needed
+
+	Est. low risk
+score 8
+	0d ago	23 vs 18	in 15d	₹2,167	Start recovery
+Page 1 of 2
+Next

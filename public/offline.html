@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline · GymPulse</title>
+<style>
+  :root { --bg: #f5f3f8; --ink: #1a1530; --ink-2: #4a4f66; --brand: #b3135f; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f0c1c; --ink: #f3f1fa; --ink-2: #b7b3c9; --brand: #ff5c9f; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center; }
+  main { max-width: 22rem; }
+  img { width: 64px; height: 64px; border-radius: 18px; }
+  h1 { margin: 20px 0 8px; font-size: 1.5rem; line-height: 1.2; }
+  p { margin: 0 0 24px; color: var(--ink-2); }
+  button { font: inherit; font-weight: 600; color: #fff; background: var(--brand); border: 0; border-radius: 999px; padding: 12px 24px; cursor: pointer; }
+  @media (prefers-color-scheme: dark) { button { color: #1a1530; } }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icons/icon-192.png" alt="">
+  <h1>You're offline</h1>
+  <p>GymPulse needs a connection to show live member data. Check your Wi-Fi or mobile data and try again.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+<script>addEventListener("online", () => location.reload());</script>
+</body>
+</html>

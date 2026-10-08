@@ -1,0 +1,8 @@
+{
+  // The app's tsconfig excludes e2e/ so a broken Playwright script can't fail `next build`;
+  // `npm run typecheck` still checks these files through this config.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["./**/*.ts", "../playwright.config.ts"],
+  "exclude": []
+}

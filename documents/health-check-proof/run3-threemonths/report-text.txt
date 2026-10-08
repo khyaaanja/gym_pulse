@@ -1,0 +1,33 @@
+attendance grid · spreadsheet
+
+Imported
+
+Attendance Register September 2026.xlsx
+
+Imported
+
+40 records imported, 0 skipped.
+
+13 members may need attention. Estimated member loss over the next 30 days: 5–16.
+
+View risk report
+Open Pulse
+Preview
+
+0 rows
+
+Needs attention
+All rows
+Clean
+Duplicates
+Can't import
+Excluded
+
+No rows here.
+
+Highlighted cells were hard to read. Existing members are never overwritten: merging only fills empty details and adds attendance and history.
+
+The original file is stored encrypted and will be deleted on 6 October. Malware scan: not configured on this server.
+
+Delete original file
+Delete import data

@@ -1,0 +1,66 @@
+Know Your Gym
+
+An estimated view of member loss, what's driving it, and what contacting members could change.
+
+Analyze records
+Refresh estimate
+
+Next 30 days · estimated member loss
+
+5–16
+
+Estimated range. Confidence: Moderate. Based on 29 members and 1,798 attendance records (1 Jul 2026 – 29 Sept 2026).
+
+Active members
+27
+Estimated at risk
+6–17
+High / critical risk
+13
+Memberships expiring
+24
+What is driving the estimate?
+24
+members are approaching expiry within 30 days
+20
+members have significant attendance decline (40%+ fewer visits than the previous 30 days)
+13
+members have gone 10+ days without a visit
+13
+high-risk members have never renewed before
+See members and reasons
+Scenarios
+
+Estimates only — not promises.
+
+If the current pattern continues
+
+5–16 members lost
+
+If at-risk members are contacted
+
+Not enough recovery history yet
+
+Not enough recovery history yet — we'll estimate this once at least 10 contacted members have an outcome (you have 0).
+
+Estimated revenue at risk
+
+₹14,407–₹40,821/month
+
+Estimated members at risk × average monthly fee (₹2,401). Not all of this would be lost.
+
+How confident is this?
+3 months of attendance history
+Detailed visit records per member
+Clean imported data
+Not yet calibrated against real outcomes
+
+risk-engine-v1.0 — a transparent, rules-based score from attendance frequency and trend, days since last visit, visit gaps, membership expiry and renewal history. No personal or sensitive attributes are used. Likelihoods are not yet calibrated against real outcomes, so ranges are deliberately wide. Generated 29 Sept 2026.
+
+Earlier estimates
+29 Sept 2026 · import
+5–16
+29 Sept 2026 · import
+13–29
+29 Sept 2026 · import
+5–20

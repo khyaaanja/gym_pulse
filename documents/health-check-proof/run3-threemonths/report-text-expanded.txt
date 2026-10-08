@@ -1,0 +1,219 @@
+Risk report
+
+29 Sept 2026 · from imported records · risk-engine-v1.0
+
+Next 30 days · estimated member loss
+
+5–16
+
+Estimated range. Confidence: Moderate. Based on 29 members and 1,798 attendance records (1 Jul 2026 – 29 Sept 2026).
+
+Active members
+27
+Estimated at risk
+6–17
+High / critical risk
+13
+Memberships expiring
+24
+What is driving the estimate?
+24
+members are approaching expiry within 30 days
+20
+members have significant attendance decline (40%+ fewer visits than the previous 30 days)
+13
+members have gone 10+ days without a visit
+13
+high-risk members have never renewed before
+Scenarios
+
+Estimates only — not promises.
+
+If the current pattern continues
+
+5–16 members lost
+
+If at-risk members are contacted
+
+Not enough recovery history yet
+
+Not enough recovery history yet — we'll estimate this once at least 10 contacted members have an outcome (you have 0).
+
+Estimated revenue at risk
+
+₹14,407–₹40,821/month
+
+Estimated members at risk × average monthly fee (₹2,401). Not all of this would be lost.
+
+How confident is this?
+3 months of attendance history
+Detailed visit records per member
+Clean imported data
+Not yet calibrated against real outcomes
+
+risk-engine-v1.0 — a transparent, rules-based score from attendance frequency and trend, days since last visit, visit gaps, membership expiry and renewal history. No personal or sensitive attributes are used. Likelihoods are not yet calibrated against real outcomes, so ranges are deliberately wide. Generated 29 Sept 2026.
+
+Members
+
+Sorted by estimated risk. Tap Why? for the reasons behind each estimate.
+
+All
+Critical
+High
+Moderate
+Low
+Member	Estimate	Last visit	Visits (30d vs prior)	Expiry	Fee / month	
+Actions
+
+Puja Lama
+Why?
+	Est. critical attention
+score 82
+	22d ago	1 vs 8	in 6d	₹2,500	Start recovery
+Sunita KC
+Why?
+	Est. critical attention
+score 80
+	25d ago	1 vs 18	in 5d	₹2,500	Start recovery
+Manisha Magar
+Why?
+	Est. critical attention
+score 76
+	50d ago	0 vs 8	in 10d	₹2,500	Start recovery
+Bibek Sharma
+Why?
+	Est. high risk
+score 72
+	25d ago	4 vs 20	in 8d	₹2,500	Start recovery
+Gaurav Basnet
+Why?
+	Est. high risk
+score 70
+	46d ago	0 vs 9	in 18d	₹2,167	Start recovery
+Nabin Rana
+Why?
+	Est. high risk
+score 70
+	22d ago	5 vs 17	in 14d	₹2,167	Start recovery
+Samjhana Khadka
+Why?
+	Est. high risk
+score 70
+	42d ago	0 vs 11	in 26d	₹2,500	Start recovery
+Kabita Bajracharya
+Why?
+	Est. high risk
+score 69
+	23d ago	6 vs 18	in 11d	₹2,500	Start recovery
+Hari Bhandari
+Why?
+	Est. high risk
+score 66
+	39d ago	0 vs 12	—	—	Start recovery
+Pratima Shrestha
+Why?
+	Est. high risk
+score 65
+	21d ago	6 vs 22	in 17d	₹2,500	Start recovery
+Sandeep Maharjan
+Why?
+	Est. high risk
+score 63
+	21d ago	6 vs 18	in 20d	₹2,500	Start recovery
+Rita Gurung
+Why?
+	Est. high risk
+score 61
+	19d ago	7 vs 18	in 23d	₹2,500	Start recovery
+Ashish Tamang
+Why?
+	Est. high risk
+score 58
+	18d ago	8 vs 18	in 26d	₹2,500	Start recovery
+Binita Karki
+Why?
+	Est. moderate risk
+score 47
+	7d ago	4 vs 23	in 20d	₹2,500	Start recovery
+Laxmi Pandey
+Why?
+	Est. moderate risk
+score 41
+	1d ago	3 vs 12	in 2d	₹2,500	Start recovery
+Utsav Rai
+Why?
+	Est. moderate risk
+score 38
+	6d ago	6 vs 18	—	—	Start recovery
+Sabina Adhikari
+Why?
+	Est. moderate risk
+score 37
+	5d ago	6 vs 19	in 30d	₹2,167	Start recovery
+Ramesh Thapa
+Why?
+	Est. moderate risk
+score 36
+	4d ago	6 vs 21	in 25d	₹2,500	Start recovery
+Niraj Poudel
+Why?
+	Est. moderate risk
+score 30
+	1d ago	4 vs 7	in 4d	₹2,500	Start recovery
+Sagar Magar
+Why?
+	Est. low risk
+score 16
+	1d ago	13 vs 23	—	—	Start recovery
+Shreya Bajracharya
+Why?
+	Est. low risk
+score 11
+	0d ago	12 vs 0	in 14d	₹2,500	Start recovery
+Bishal Sharma
+Why?
+	Est. low risk
+score 11
+	0d ago	14 vs 0	in 13d	₹2,500	Start recovery
+Rajesh Joshi
+Why?
+	Est. low risk
+score 11
+	1d ago	16 vs 19	—	—	Start recovery
+Manish Bhandari
+Why?
+	Est. low risk
+score 10
+	2d ago	21 vs 21	—	—	Start recovery
+Anjali Tamang
+Why?
+	Est. low risk
+score 10
+	0d ago	18 vs 20	in 27d	₹2,500	Start recovery
+Kiran Khadka
+Why?
+	Est. low risk
+score 10
+	1d ago	18 vs 20	—	—	Start recovery
+Yogesh Rana
+Why?
+	Est. low risk
+score 10
+	1d ago	11 vs 0	in 15d	₹2,167	Start recovery
+Prakash Thapa
+Why?
+	Est. low risk
+score 8
+	1d ago	18 vs 17	—	—	Start recovery
+Bikash Gurung
+Why?
+	Est. low risk
+score 8
+	0d ago	22 vs 22	in 23d	₹2,500	Start recovery
+Aarav Shrestha
+Why?
+	Est. low risk
+score 8
+	0d ago	23 vs 18	in 15d	₹2,167	Start recovery
+Page 1 of 2
+Next
