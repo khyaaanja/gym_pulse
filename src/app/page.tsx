@@ -49,7 +49,8 @@ export default async function Landing() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
           {/* Below 390px the wordmark would push the account buttons off screen; the mark (and its "GymPulse home" label) stays. */}
           <Logo className="[&_rect]:fill-white/10 [&_rect]:stroke-white/20 max-[389px]:[&>span]:hidden" />
-          <nav className="hidden items-center gap-1 text-sm font-medium text-white/80 md:flex" aria-label="Sections">
+          {/* From 1024px only: on a portrait tablet the four links wrapped to two and three lines and doubled the header. */}
+          <nav className="hidden items-center gap-1 whitespace-nowrap text-sm font-medium text-white/80 lg:flex" aria-label="Sections">
             {[["#how", "How it works"], ["#pricing", "Pricing"], ["#faq", "Questions"], ["#check", "Free records check"]].map(([href, label]) => (
               <a key={href} href={href} className="rounded-full px-3.5 py-2 transition-colors hover:bg-white/10 hover:text-white">{label}</a>
             ))}
@@ -108,7 +109,7 @@ export default async function Landing() {
                       <span className="grid size-9 place-items-center rounded-full bg-[#ff6a47]/20 text-xs font-semibold text-[#ffb3a1]">{n!.split(" ").map((p) => p[0]).join("")}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{n}</span>
-                        <span className="block truncate text-xs text-white/60">{d}</span>
+                        <span className="block text-xs text-white/60">{d}</span>
                       </span>
                       <span className="num text-sm font-medium">{f}</span>
                     </li>

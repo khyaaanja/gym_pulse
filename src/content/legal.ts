@@ -28,21 +28,21 @@ Two other documents are part of these terms: the Privacy Policy explains how per
 
 - Each plan includes a number of free months, shown on the pricing page when you sign up. No payment card is needed to start.
 - After the free months, the plan is billed monthly in Nepali rupees. Invoices appear in Settings → GymPulse plan, and any taxes that apply are shown on the invoice.
-- Plans have limits (members, staff accounts, record imports, estimates and messages per month). When a limit is reached, the related feature pauses until the next month or an upgrade. Your data is not deleted.
+- Plans have limits: how many members and staff accounts you can have, and how many record imports, risk estimates and messages you can use each month. When a monthly limit is reached, that feature pauses until the next month or until you upgrade. When the member or staff limit is reached, you can't add more until you upgrade, or archive members or turn off staff accounts you no longer need. Reaching a limit never deletes your data.
 - You can cancel at any time. Your gym keeps access until the end of the month it has paid for. The Refund Policy explains when fees are refunded.
-- Custom deployments are priced separately, in a written quote.
-- If an invoice becomes overdue, your plan is marked past due in Settings → GymPulse plan and we'll contact you before any change to your access. We never delete data because a payment is late.
+- A private setup (GymPulse on its own server, just for your gym) is priced separately, in a written quote.
+- If an invoice becomes overdue, your plan is marked "Past due" (unpaid) in Settings → GymPulse plan and we'll contact you before any change to your access. We never delete data because a payment is late.
 
 ## 3. Your gym's data
 
 - Your gym owns the member records, attendance, payments and files it puts into GymPulse. We use them only to run the service for you, as the Privacy Policy describes.
 - You're responsible for having the right to collect and use your members' information, and for telling members that you use GymPulse.
-- When you upload a register or spreadsheet, we read it so you can review it before anything is imported. The original file is deleted automatically after 7 days (you can change this, or delete it sooner).
+- When you upload a register or spreadsheet, we read it so you can review it before anything is imported. The original file is deleted automatically after 7 days (you can change this to anywhere from 1 to 90 days, or delete it sooner).
 - You can export your reports at any time. If you close your account, ask us and we'll delete your gym's data, except records we must keep by law, such as invoices.
 
 ## 4. Estimates and messages
 
-- "At risk" alerts and churn estimates are estimates, shown with a range and a confidence level. They help staff decide who to contact first. They aren't guarantees, and they shouldn't be the only basis for a decision about a person.
+- "At risk" alerts and estimates of who may leave are only estimates. They are shown with a range and a confidence level. They help staff decide who to contact first. They aren't guarantees, and they shouldn't be the only basis for a decision about a person.
 - Messages you send through GymPulse (SMS, email, WhatsApp, in-app and push) must be lawful and relevant to your gym. Members can turn off categories of messages, and you must respect that. Security messages are always sent.
 - SMS and WhatsApp are delivered through providers your gym connects. Their charges are between you and them.
 
@@ -99,7 +99,7 @@ If you're a member with a question about your data, start with your gym. You can
 
 ## What we hold
 
-- **Account details:** name, email, mobile number and a securely hashed password. We never store passwords in readable form.
+- **Account details:** name, email, mobile number and your password, stored in a scrambled form. We never store passwords in a form anyone can read.
 - **Membership records:** member ID, plans, start and end dates, trainer, notes staff add, and card or wristband IDs used for check-in.
 - **Attendance:** each check-in, how it was made (at the desk, by scanning the gym's QR code, or with a card) and the branch.
 - **Payments:** amounts, method, references and receipts. Card and wallet details stay with eSewa or Khalti; we never see them.
@@ -127,7 +127,7 @@ Only as needed to provide the service:
 - **Browser push services** (for example Google, Apple, Mozilla or Microsoft, depending on your browser) to deliver phone and desktop alerts. Alert contents are encrypted so these services can't read them.
 - **Marketplace vendors** receive the details they need to deliver your order.
 - **Our hosting provider,** which stores data for us and must keep it secure.
-- **Authorities,** when the law requires it. We push back on requests that aren't lawful.
+- **Authorities,** when the law requires it. We refuse requests that aren't lawful.
 
 ## Cookies and device storage
 
@@ -135,7 +135,7 @@ GymPulse uses only the cookies needed to keep you signed in securely. There are 
 
 ## How long it's kept
 
-- Uploaded import files are deleted automatically after 7 days by default. Each gym can shorten this, or delete a file straight away.
+- Uploaded import files are deleted automatically after 7 days by default. Each gym can change this to anywhere from 1 to 90 days, or delete a file straight away.
 - Member records stay while the gym uses GymPulse. When a gym archives a member, the history stays available for the gym's reports until the gym asks for it to be deleted.
 - Sign-in sessions expire, and signing out removes that device from phone and desktop alerts.
 - Billing records are kept as long as tax law requires.
@@ -143,7 +143,7 @@ GymPulse uses only the cookies needed to keep you signed in securely. There are 
 
 ## How it's protected
 
-Uploaded files and payment-provider credentials are encrypted. Passwords are hashed. Staff see only what their role allows, important actions are recorded in each gym's audit log, and repeated sign-in attempts are limited. Two-step verification is available for every account.
+Uploaded files and the keys that connect your gym to eSewa and Khalti are encrypted. Passwords are stored in a scrambled form. Staff see only what their role allows, important actions are recorded in each gym's audit log, and repeated sign-in attempts are limited. Two-step verification is available for every account.
 
 ## Your choices and rights
 
@@ -199,7 +199,7 @@ Memberships, renewals and marketplace purchases are paid to your gym. Online pay
 - Free months are free — there's nothing to refund and no card is needed to start.
 - After the free months, plans are billed monthly. You can cancel at any time and keep access until the end of the paid month. We don't refund part-used months.
 - We refund in full: billing mistakes, charges made after you cancelled, and double charges.
-- Custom deployment fees follow the terms in your written quote.
+- Fees for a private setup follow the terms in your written quote.
 
 To ask about a GymPulse charge, write to {{supportEmail}} or use Settings → Support within 30 days of the charge. We reply within 5 working days and refund to the original payment method.`,
   },
@@ -229,7 +229,7 @@ To ask about a GymPulse charge, write to {{supportEmail}} or use Settings → Su
 
 ## Products
 
-- Products are collected from the gym unless the listing says otherwise. The gym marks your order as fulfilled when you receive it.
+- Products are collected from the gym unless the listing says otherwise. The gym marks your order as delivered when you receive it.
 - Stock is limited. If an item runs out after you've paid, you'll get a full refund.
 
 ## Health and safety

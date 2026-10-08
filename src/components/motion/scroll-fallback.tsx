@@ -5,6 +5,7 @@ import { useEffect } from "react";
 // month cells. Nested cards are left to their parent, as the CSS does.
 const WATCH = ".kinetic, .scroll-3d:not(.scroll-3d .scroll-3d, [role=dialog] .scroll-3d), .plan-3d";
 const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+const SLACK = 48;
 
 const WORD: Keyframe[] = [{ opacity: 0, transform: "translate3d(0, 0.6em, -120px) rotateX(-82deg)" }, { opacity: 1, transform: "none" }];
 const RISE: Keyframe[] = [
@@ -25,7 +26,6 @@ const CELL: Keyframe[] = [{ opacity: 0.2, transform: "perspective(500px) rotateY
 export function ScrollFallback() {
   useEffect(() => {
     if (CSS.supports("animation-timeline: view()") || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const root = document.documentElement;
     const seen = new WeakSet<Element>();
     const play = (el: HTMLElement, frames: Keyframe[], delay: number, origin: string, duration = 620) => {
       el.style.transformOrigin = origin;
@@ -57,8 +57,9 @@ export function ScrollFallback() {
           if (!seen.has(el)) {
             seen.add(el);
             // Any part on screen the first time it is seen: shown as is. (Not isIntersecting: the root margin would
-            // count the bottom strip as off screen and hide what the reader can see, for good on a page too short to scroll.)
-            if (e.boundingClientRect.top < window.innerHeight) { io.unobserve(el); continue; }
+            // count the bottom strip as off screen and hide what the reader can see, for good on a page too short to
+            // scroll.) The slack covers content a page swing is still carrying down (Motion3D moves it 28px) or the first-load entrance (~26px).
+            if (e.boundingClientRect.top < window.innerHeight + SLACK) { io.unobserve(el); continue; }
             // Below the fold: hidden until it arrives, so it doesn't flash in place first (see globals.css).
             el.setAttribute("data-scroll-wait", "");
             continue;
@@ -71,21 +72,17 @@ export function ScrollFallback() {
       { rootMargin: "0px 0px -8% 0px" },
     );
     const scan = () => document.querySelectorAll(WATCH).forEach((el) => { if (!seen.has(el)) io.observe(el); });
+    // The first look is straight away, so what the reader scrolls to during the first-load entrance still plays. The
+    // entrance moves content down by at most ~26px, inside SLACK, so nothing near the fold is mistaken for off screen.
     scan();
     let pending = 0;
     const mo = new MutationObserver(() => { if (!pending) pending = window.setTimeout(() => { pending = 0; scan(); }, 150); });
     mo.observe(document.body, { childList: true, subtree: true });
-    // Printing (or anything else that needs the whole page) never leaves content hidden.
-    const reveal = () => document.querySelectorAll("[data-scroll-wait]").forEach((el) => el.removeAttribute("data-scroll-wait"));
-    window.addEventListener("beforeprint", reveal);
-    root.setAttribute("data-scroll-fallback", "");
     return () => {
       io.disconnect();
       mo.disconnect();
       window.clearTimeout(pending);
-      window.removeEventListener("beforeprint", reveal);
-      reveal();
-      root.removeAttribute("data-scroll-fallback");
+      document.querySelectorAll("[data-scroll-wait]").forEach((el) => el.removeAttribute("data-scroll-wait"));
     };
   }, []);
   return null;

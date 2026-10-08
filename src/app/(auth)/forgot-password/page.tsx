@@ -1,6 +1,8 @@
 import { AuthShell } from "@/components/auth/shell";
 import { AuthForm } from "@/components/auth/forms";
 
+export const metadata = { title: "Reset your password" };
+
 export default function Forgot() {
   return (
     <AuthShell title="Reset your password" subtitle="We'll send a reset link to your email or phone.">

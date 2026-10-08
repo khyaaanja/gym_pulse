@@ -1,6 +1,8 @@
 import { AuthShell } from "@/components/auth/shell";
 import { AuthForm } from "@/components/auth/forms";
 
+export const metadata = { title: "Choose a new password" };
+
 export default async function Reset({ searchParams }: PageProps<"/reset-password">) {
   const { token } = await searchParams;
   return (
