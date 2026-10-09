@@ -64,6 +64,22 @@ function useWidth() {
   return [ref, w] as const;
 }
 
+/**
+ * The highlighted point or bar. A mouse clears it on leaving the chart; a finger lifts straight after a tap, so a
+ * tapped point stays highlighted until the next tap anywhere outside the chart.
+ */
+function useHover(box: RefObject<HTMLDivElement | null>) {
+  const [hover, setHover] = useState<number | null>(null);
+  useEffect(() => {
+    if (hover === null) return;
+    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setHover(null); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [hover, box]);
+  const leave = (e: PointerEvent) => { if (e.pointerType !== "touch") setHover(null); };
+  return [hover, setHover, leave] as const;
+}
+
 function Tip({ x, y, w, title, children }: { x: number; y: number; w: number; title: string; children: ReactNode }) {
   // Sits right of the pointer, or left of it near the right edge, like the old tooltip.
   const right = x > w - 150;
@@ -98,7 +114,7 @@ function YAxis({ ticks: ts, y, left, w, format }: { ticks: number[]; y: (v: numb
 /** Single series: daily check-ins. No legend (the title names it); crosshair tooltip on hover or touch. */
 export function AttendanceChart({ data, height = 220 }: { data: { date: string; visits: number }[]; height?: number }) {
   const [box, w] = useWidth();
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover, leave] = useHover(box);
   // useId's punctuation isn't safe inside url(#…).
   const fill = `att${useId().replace(/[^\w-]/g, "")}`;
   const label = `Daily check-ins, ${data.length} days`;
@@ -126,7 +142,7 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
 
   return (
     <Frame box={box} height={height} label={label}>
-      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)}>
+      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick} onPointerLeave={leave}>
         <defs>
           <linearGradient id={fill} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.22} />
@@ -154,7 +170,7 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
 /** Single-hue bars for magnitude (e.g. revenue by stream). Labels are the categories; values in the tooltip. */
 export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: string; value: number }[]; unit: string; height?: number }) {
   const [box, w] = useWidth();
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover, leave] = useHover(box);
   const label = data.map((d) => `${d.label}: ${d.value}`).join(", ");
   if (!w || data.length === 0) return <Frame box={box} height={height} label={label}>{null}</Frame>;
 
@@ -181,7 +197,7 @@ export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: str
 
   return (
     <Frame box={box} height={height} label={label}>
-      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)}>
+      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick} onPointerLeave={leave}>
         {hover !== null && <rect x={left + band * hover} y={PAD.top} width={band} height={plotH} fill="var(--surface-2)" />}
         <YAxis ticks={ts} y={y} left={left} w={w} format={compact} />
         {data.map((d, i) => {
