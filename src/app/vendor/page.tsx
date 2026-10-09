@@ -10,6 +10,7 @@ import { Table, Td, Th } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { SignOut } from "@/components/app/sign-out";
+import { formatDate } from "@/lib/time";
 
 export const metadata = { title: "Vendor" };
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function Vendor() {
   const [gyms, products, items, categories, payable] = await Promise.all([
     prisma.vendorGym.findMany({ where: { vendorId: v.id, active: true }, include: { gym: { select: { id: true, name: true } } } }),
     prisma.marketplaceProduct.findMany({ where: { vendorId: v.id }, include: { gym: { select: { name: true } }, category: true }, orderBy: { updatedAt: "desc" } }),
-    prisma.orderItem.findMany({ where: { vendorId: v.id, order: { status: { in: ["PAID", "FULFILLED"] } } }, include: { order: { select: { number: true, paidAt: true, status: true, gym: { select: { name: true } } } } }, take: 50, orderBy: { order: { paidAt: "desc" } } }),
+    prisma.orderItem.findMany({ where: { vendorId: v.id, order: { status: { in: ["PAID", "FULFILLED"] } } }, include: { order: { select: { number: true, paidAt: true, status: true, gym: { select: { name: true, timezone: true } } } } }, take: 50, orderBy: { order: { paidAt: "desc" } } }),
     prisma.marketplaceCategory.findMany({ where: { active: true, kind: "PRODUCT" }, orderBy: { sortOrder: "asc" } }),
     prisma.ledgerEntry.aggregate({ _sum: { amountPaisa: true }, where: { vendorId: v.id, account: "VENDOR_PAYABLE" } }),
   ]);
@@ -64,7 +65,7 @@ export default async function Vendor() {
       <Card className="mt-4">
         <CardHeader title="Sales" description="Order lines for your products. Customer details aren't shared with vendors." />
         <CardBody>
-          <ul className="divide-y divide-line text-sm">{items.map((i) => <li key={i.id} className="flex justify-between py-2.5"><span>{i.name} ×{i.quantity} <span className="text-ink-3">· {i.order.gym.name} · {i.order.paidAt?.toLocaleDateString("en-GB")}</span></span><span className="num">{formatMoney(Math.round((i.unitPricePaisa * i.quantity * i.vendorBps) / 10000))}</span></li>)}</ul>
+          <ul className="divide-y divide-line text-sm">{items.map((i) => <li key={i.id} className="flex justify-between py-2.5"><span>{i.name} ×{i.quantity} <span className="text-ink-3">· {i.order.gym.name} · {formatDate(i.order.paidAt, { day: "2-digit", month: "2-digit", year: "numeric" }, i.order.gym.timezone)}</span></span><span className="num">{formatMoney(Math.round((i.unitPricePaisa * i.quantity * i.vendorBps) / 10000))}</span></li>)}</ul>
           {items.length === 0 && <p className="text-sm text-ink-3">No sales yet.</p>}
         </CardBody>
       </Card>

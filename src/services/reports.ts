@@ -1,6 +1,7 @@
 import type { RecoveryEventType } from "@/generated/prisma/client";
 import { tenantDb } from "@/db/tenant";
-import { fromDbDate, toDbDate } from "@/lib/time";
+import { addDays, fromDbDate, localDate, startOfLocalDay, toDbDate } from "@/lib/time";
+import { prisma } from "@/db/client";
 import type { Range } from "./analytics";
 
 /** CSV cell escaping, including spreadsheet formula-injection protection (=, +, -, @, tab, CR). */
@@ -52,8 +53,7 @@ export type RecoverySummary = {
  */
 export async function recoverySummary(gymId: string, range: Range): Promise<RecoverySummary> {
   const db = tenantDb(gymId);
-  const from = toDbDate(range.from);
-  const toEnd = new Date(toDbDate(range.to).getTime() + 86_400_000);
+  const { from, toEnd } = await instantWindow(gymId, range);
   const where = recoveryWindow(from, toEnd);
   const [tasks, failedMessages] = await Promise.all([
     db.recoveryTask.findMany({ where, select: { status: true, createdAt: true, returnedAt: true, recoveredAt: true, lastContactAt: true, contactMethod: true, protectedRevenuePaisa: true } }),
@@ -87,11 +87,24 @@ export async function recoverySummary(gymId: string, range: Range): Promise<Reco
   };
 }
 
+/**
+ * Timestamp columns are filtered by the gym's local calendar days, the same window the dashboards use
+ * (analytics.ts). A UTC window would file a 5 a.m. Kathmandu payment under the previous day.
+ */
+async function instantWindow(gymId: string, range: Range) {
+  const { timezone } = await prisma.gym.findUniqueOrThrow({ where: { id: gymId }, select: { timezone: true } });
+  return { tz: timezone, from: startOfLocalDay(range.from, timezone), toEnd: startOfLocalDay(addDays(range.to, 1), timezone) };
+}
+
 export async function buildReport(gymId: string, key: ReportKey, range: Range): Promise<{ filename: string; csv: string }> {
   const db = tenantDb(gymId);
-  const from = toDbDate(range.from);
+  const { tz, from, toEnd } = await instantWindow(gymId, range);
+  // Date-only columns (attendance day, membership end) compare against calendar days directly.
+  const fromDay = toDbDate(range.from);
   const to = toDbDate(range.to);
-  const toEnd = new Date(to.getTime() + 86_400_000);
+  // Instants are written as the gym's local date.
+  const day = (x: Date | null | undefined) => (x ? localDate(x, tz) : "");
+  const hhmm = (x: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(x);
   const LIMIT = 50_000;
   let headers: string[] = [];
   let rows: unknown[][] = [];
@@ -99,17 +112,17 @@ export async function buildReport(gymId: string, key: ReportKey, range: Range): 
     case "members": {
       const ms = await db.member.findMany({ where: { archivedAt: null }, orderBy: { fullName: "asc" }, take: LIMIT, include: { memberships: { orderBy: { endDate: "desc" }, take: 1, include: { plan: true } } } });
       headers = ["Member ID", "Name", "Phone", "Email", "Joined", "Status", "Risk status", "Plan", "Expiry", "Last visit", "Total visits", "Current streak"];
-      rows = ms.map((m) => [m.memberCode, m.fullName, m.phone, m.email, d(m.joinedOn), m.status, m.riskStatus, m.memberships[0]?.plan.name, d(m.memberships[0]?.endDate), m.lastAttendanceAt?.toISOString().slice(0, 10), m.totalVisits, m.currentStreak]);
+      rows = ms.map((m) => [m.memberCode, m.fullName, m.phone, m.email, d(m.joinedOn), m.status, m.riskStatus, m.memberships[0]?.plan.name, d(m.memberships[0]?.endDate), day(m.lastAttendanceAt), m.totalVisits, m.currentStreak]);
       break;
     }
     case "attendance": {
-      const a = await db.attendance.findMany({ where: { localDate: { gte: from, lte: to } }, include: { member: { select: { memberCode: true, fullName: true } }, location: { select: { name: true } } }, orderBy: { checkedInAt: "asc" }, take: LIMIT });
+      const a = await db.attendance.findMany({ where: { localDate: { gte: fromDay, lte: to } }, include: { member: { select: { memberCode: true, fullName: true } }, location: { select: { name: true } } }, orderBy: { checkedInAt: "asc" }, take: LIMIT });
       headers = ["Date", "Time (UTC)", "Member ID", "Name", "Method", "Branch"];
-      rows = a.map((x) => [d(x.localDate), x.checkedInAt.toISOString().slice(11, 16), x.member.memberCode, x.member.fullName, x.method, x.location?.name]);
+      rows = a.map((x) => [d(x.localDate), hhmm(x.checkedInAt), x.member.memberCode, x.member.fullName, x.method, x.location?.name]);
       break;
     }
     case "renewals": {
-      const ms = await db.membership.findMany({ where: { endDate: { gte: from, lte: to } }, include: { member: true, plan: true, renewedTo: true }, orderBy: { endDate: "asc" }, take: LIMIT });
+      const ms = await db.membership.findMany({ where: { endDate: { gte: fromDay, lte: to } }, include: { member: true, plan: true, renewedTo: true }, orderBy: { endDate: "asc" }, take: LIMIT });
       headers = ["Member ID", "Name", "Plan", "Start", "End", "Price (NPR)", "Renewed", "Renewed until"];
       rows = ms.map((m) => [m.member.memberCode, m.member.fullName, m.plan.name, d(m.startDate), d(m.endDate), rs(m.pricePaisa), m.renewedTo ? "Yes" : "No", d(m.renewedTo?.endDate)]);
       break;
@@ -117,39 +130,39 @@ export async function buildReport(gymId: string, key: ReportKey, range: Range): 
     case "churn": {
       const h = await db.riskHistory.findMany({ where: { changedAt: { gte: from, lt: toEnd } }, include: { member: { select: { memberCode: true, fullName: true } } }, orderBy: { changedAt: "asc" }, take: LIMIT });
       headers = ["Date", "Member ID", "Name", "From", "To", "Score", "Reason"];
-      rows = h.map((x) => [x.changedAt.toISOString().slice(0, 10), x.member.memberCode, x.member.fullName, x.fromStatus, x.toStatus, x.score, x.reason]);
+      rows = h.map((x) => [day(x.changedAt), x.member.memberCode, x.member.fullName, x.fromStatus, x.toStatus, x.score, x.reason]);
       break;
     }
     case "risk": {
       const report = await db.predictionReport.findFirst({ orderBy: { generatedAt: "desc" } });
       const a = report ? await db.riskAssessment.findMany({ where: { reportId: report.id }, include: { member: { select: { memberCode: true, fullName: true, phone: true } } }, orderBy: { score: "desc" }, take: LIMIT }) : [];
       headers = ["Report date", "Model", "Member ID", "Name", "Phone", "Estimated risk", "Score (0-100)", "Estimated likelihood", "Days since visit", "Visits last 30d", "Visits prev 30d", "Days to expiry", "Monthly fee (NPR)", "Main reasons", "Recommended action"];
-      rows = a.map((x) => [report!.generatedAt.toISOString().slice(0, 10), x.modelVersion, x.member.memberCode, x.member.fullName, x.member.phone, x.category, x.score, x.likelihood.toFixed(2), x.daysSinceLastVisit, x.visitsLast30, x.visitsPrev30, x.daysToExpiry, rs(x.monthlyFeePaisa), (x.factors as { detail: string }[]).map((f) => f.detail).join("; "), x.recommendedAction]);
+      rows = a.map((x) => [day(report!.generatedAt), x.modelVersion, x.member.memberCode, x.member.fullName, x.member.phone, x.category, x.score, x.likelihood.toFixed(2), x.daysSinceLastVisit, x.visitsLast30, x.visitsPrev30, x.daysToExpiry, rs(x.monthlyFeePaisa), (x.factors as { detail: string }[]).map((f) => f.detail).join("; "), x.recommendedAction]);
       break;
     }
     case "recovery": {
       const t = await db.recoveryTask.findMany({ where: recoveryWindow(from, toEnd), include: { member: { select: { memberCode: true, fullName: true, phone: true } }, assignedTo: { include: { user: { select: { name: true } } } }, _count: { select: { events: { where: { type: { in: CONTACT_EVENTS } } } } } }, orderBy: { createdAt: "asc" }, take: LIMIT });
       headers = ["Opened", "Member ID", "Name", "Phone", "Reason", "Assigned to", "Status", "Contact attempts", "Last contact", "Method", "Result", "Returned", "Days to return", "Renewed", "Closed", "Monthly fee (NPR)", "Est. protected revenue (NPR)"];
-      rows = t.map((x) => [x.createdAt.toISOString().slice(0, 10), x.member.memberCode, x.member.fullName, x.member.phone, x.reason, x.assignedTo?.user.name, x.status, x._count.events, x.lastContactAt?.toISOString().slice(0, 10), x.contactMethod, x.contactResult, x.returnedAt?.toISOString().slice(0, 10), x.returnedAt ? daysBetween(x.createdAt, x.returnedAt) : "", x.recoveredAt?.toISOString().slice(0, 10), x.closedAt?.toISOString().slice(0, 10), rs(x.monthlyFeePaisa), rs(x.protectedRevenuePaisa)]);
+      rows = t.map((x) => [day(x.createdAt), x.member.memberCode, x.member.fullName, x.member.phone, x.reason, x.assignedTo?.user.name, x.status, x._count.events, day(x.lastContactAt), x.contactMethod, x.contactResult, day(x.returnedAt), x.returnedAt ? daysBetween(x.createdAt, x.returnedAt) : "", day(x.recoveredAt), day(x.closedAt), rs(x.monthlyFeePaisa), rs(x.protectedRevenuePaisa)]);
       break;
     }
     case "revenue":
     case "payments": {
       const p = await db.payment.findMany({ where: { createdAt: { gte: from, lt: toEnd }, ...(key === "revenue" ? { status: "SUCCEEDED" } : {}) }, include: { member: { select: { memberCode: true, fullName: true } }, invoice: true }, orderBy: { createdAt: "asc" }, take: LIMIT });
       headers = ["Date", "Reference", "Receipt", "Member ID", "Name", "Purpose", "Method", "Provider", "Status", "Amount (NPR)", "Discount (NPR)", "Failure reason"];
-      rows = p.map((x) => [(x.paidAt ?? x.createdAt).toISOString().slice(0, 10), x.reference, x.invoice?.number, x.member?.memberCode, x.member?.fullName, x.purpose, x.method, x.provider, x.status, rs(x.amountPaisa), rs(x.discountPaisa), x.failureReason]);
+      rows = p.map((x) => [day(x.paidAt ?? x.createdAt), x.reference, x.invoice?.number, x.member?.memberCode, x.member?.fullName, x.purpose, x.method, x.provider, x.status, rs(x.amountPaisa), rs(x.discountPaisa), x.failureReason]);
       break;
     }
     case "marketplace": {
       const o = await db.marketplaceOrder.findMany({ where: { placedAt: { gte: from, lt: toEnd } }, include: { member: { select: { memberCode: true, fullName: true } }, items: true }, orderBy: { placedAt: "asc" }, take: LIMIT });
       headers = ["Placed", "Order", "Member ID", "Name", "Items", "Status", "Total (NPR)", "Gym share (NPR)", "Platform fee (NPR)", "Vendor share (NPR)"];
-      rows = o.map((x) => [x.placedAt.toISOString().slice(0, 10), x.number, x.member.memberCode, x.member.fullName, x.items.map((i) => `${i.name} x${i.quantity}`).join("; "), x.status, rs(x.totalPaisa), rs(x.gymSharePaisa), rs(x.platformFeePaisa), rs(x.vendorSharePaisa)]);
+      rows = o.map((x) => [day(x.placedAt), x.number, x.member.memberCode, x.member.fullName, x.items.map((i) => `${i.name} x${i.quantity}`).join("; "), x.status, rs(x.totalPaisa), rs(x.gymSharePaisa), rs(x.platformFeePaisa), rs(x.vendorSharePaisa)]);
       break;
     }
     case "imports": {
       const j = await db.importJob.findMany({ where: { startedAt: { gte: from, lt: toEnd } }, include: { file: true, predictionReport: { select: { id: true } } }, orderBy: { startedAt: "asc" }, take: LIMIT });
       headers = ["Uploaded", "File", "Type", "Status", "Rows", "Clean", "Needs review", "Duplicates", "Invalid", "Imported", "Skipped", "Quality score", "OCR", "Prediction generated"];
-      rows = j.map((x) => [x.startedAt.toISOString().slice(0, 10), x.file.originalName, x.recordType, x.status, x.totalRows, x.cleanRows, x.reviewRows, x.duplicateRows, x.invalidRows, x.importedRows, x.skippedRows, x.qualityScore, x.ocrUsed ? "Yes" : "No", x.predictionReport ? "Yes" : "No"]);
+      rows = j.map((x) => [day(x.startedAt), x.file.originalName, x.recordType, x.status, x.totalRows, x.cleanRows, x.reviewRows, x.duplicateRows, x.invalidRows, x.importedRows, x.skippedRows, x.qualityScore, x.ocrUsed ? "Yes" : "No", x.predictionReport ? "Yes" : "No"]);
       break;
     }
   }

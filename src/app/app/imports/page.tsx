@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileUp } from "lucide-react";
 import { requireStaff } from "@/lib/page-auth";
+import { formatDate } from "@/lib/time";
 import { prisma } from "@/db/client";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader, EmptyState } from "@/components/ui/misc";
@@ -28,7 +29,7 @@ export default async function Imports() {
               {jobs.map((j) => (
                 <tr key={j.id}>
                   <Td><Link href={`/app/imports/${j.id}`} className="font-medium hover:underline">{j.file.originalName}</Link><span className="block text-xs text-ink-3">{j.recordType.replace(/_/g, " ").toLowerCase()}{j.ocrUsed ? " · photo" : ""}</span></Td>
-                  <Td className="whitespace-nowrap text-ink-2">{j.startedAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}<span className="block text-xs text-ink-3">{who.get(j.createdById) ?? "—"}</span></Td>
+                  <Td className="whitespace-nowrap text-ink-2">{formatDate(j.startedAt, { day: "numeric", month: "short" }, ctx.gym.timezone)}<span className="block text-xs text-ink-3">{who.get(j.createdById) ?? "—"}</span></Td>
                   <Td className="num text-right">{j.totalRows}</Td>
                   <Td className="num text-right">{j.importedRows}</Td>
                   <Td className="num text-right">{j.skippedRows}</Td>

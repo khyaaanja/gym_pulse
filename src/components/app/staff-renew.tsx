@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { GymContext } from "@/lib/api";
 import { gymSettings } from "@/config/gym-settings";
-import { addDays, diffDays, formatDate, fromDbDate, today as todayIn, toDbDate } from "@/lib/time";
+import { diffDays, formatDate, fromDbDate, today as todayIn } from "@/lib/time";
 import { formatMoney } from "@/lib/money";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/misc";
@@ -86,7 +86,7 @@ export async function StaffRenew({ ctx, status }: { ctx: GymContext; status: str
               <tbody>
                 {payments.map((p) => (
                   <tr key={p.id}>
-                    <Td className="whitespace-nowrap">{(p.paidAt ?? p.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</Td>
+                    <Td className="whitespace-nowrap">{formatDate(p.paidAt ?? p.createdAt, { day: "numeric", month: "short" }, ctx.gym.timezone)}</Td>
                     <Td>{p.member ? <Link href={`/app/members/${p.member.id}`} className="hover:underline">{p.member.fullName}</Link> : "—"}</Td>
                     <Td className="text-ink-2">{p.purpose === "MEMBERSHIP" ? "Membership" : "Order"}</Td>
                     <Td className="text-ink-2">{p.provider ? { esewa: "eSewa", khalti: "Khalti", sandbox: "Test" }[p.provider] ?? p.provider : p.method.replace("_", " ").toLowerCase()}</Td>

@@ -52,7 +52,7 @@ export async function MemberRenew({ ctx, notice, wantedPlanId, coupon, welcome }
                 <li key={p.id} className="flex items-center justify-between gap-3 py-3 text-sm">
                   <div>
                     <p className="font-medium">{p.purpose === "MEMBERSHIP" ? "Membership" : "Marketplace order"}</p>
-                    <p className="text-ink-3">{(p.paidAt ?? p.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    <p className="text-ink-3">{formatDate(p.paidAt ?? p.createdAt, { day: "numeric", month: "short", year: "numeric" }, ctx.gym.timezone)}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <StatusPill status={p.status} />

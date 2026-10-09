@@ -20,6 +20,7 @@ import { ImageUpload } from "@/components/app/image-upload";
 import { DeviceCreate, StaffInvite } from "@/components/app/settings-widgets";
 import { effectiveRules } from "@/services/automation";
 import { activeLocations } from "@/services/locations";
+import { formatDate } from "@/lib/time";
 
 export const metadata = { title: "Settings" };
 
@@ -327,7 +328,7 @@ export default async function Settings({ searchParams }: PageProps<"/app/setting
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="flex-1">
                       <p className="font-medium">{m.user.name} <Badge className="ml-1">{m.role.toLowerCase()}</Badge>{!m.active && <Badge tone="lost" className="ml-1">Deactivated</Badge>}</p>
-                      <p className="text-sm text-ink-3">{m.user.email ?? m.user.phone} · {m.user.mfaEnabled ? "2-step on" : "2-step off"} · last sign-in {m.user.lastLoginAt ? m.user.lastLoginAt.toLocaleDateString("en-GB") : "never"}</p>
+                      <p className="text-sm text-ink-3">{m.user.email ?? m.user.phone} · {m.user.mfaEnabled ? "2-step on" : "2-step off"} · last sign-in {m.user.lastLoginAt ? formatDate(m.user.lastLoginAt, { day: "2-digit", month: "2-digit", year: "numeric" }, g.timezone) : "never"}</p>
                     </div>
                     {m.role !== "OWNER" && m.userId !== ctx.user.id && (
                       <>
@@ -411,7 +412,7 @@ export default async function Settings({ searchParams }: PageProps<"/app/setting
     return (
       <>
         <Card>
-          <CardHeader title={sub ? `${sub.plan.name} plan` : "No subscription"} description={sub ? `${formatMoney(sub.plan.pricePaisa)}/${sub.plan.billingPeriod === "YEARLY" ? "year" : "month"} · ${sub.status === "TRIALING" ? `trial ends ${sub.currentPeriodEnd.toLocaleDateString("en-GB")}` : `renews ${sub.currentPeriodEnd.toLocaleDateString("en-GB")}`}` : undefined} action={sub && <StatusPill status={sub.status} />} />
+          <CardHeader title={sub ? `${sub.plan.name} plan` : "No subscription"} description={sub ? `${formatMoney(sub.plan.pricePaisa)}/${sub.plan.billingPeriod === "YEARLY" ? "year" : "month"} · ${sub.status === "TRIALING" ? `trial ends ${formatDate(sub.currentPeriodEnd, { day: "2-digit", month: "2-digit", year: "numeric" }, g.timezone)}` : `renews ${formatDate(sub.currentPeriodEnd, { day: "2-digit", month: "2-digit", year: "numeric" }, g.timezone)}`}` : undefined} action={sub && <StatusPill status={sub.status} />} />
           <CardBody>
             <dl className="divide-y divide-line">{kinds.map(([k, l, lim], i) => <Row key={k} k={l} v={`${used[i]} / ${lim ?? "unlimited"}`} />)}</dl>
             <p className="mt-4 text-sm text-ink-3">To change plan or pay by bank transfer, contact GymPulse from the Support tab.</p>
@@ -420,7 +421,7 @@ export default async function Settings({ searchParams }: PageProps<"/app/setting
         <Card>
           <CardHeader title="Invoices" />
           <CardBody>{invoices.length === 0 ? <p className="text-sm text-ink-3">No invoices yet.</p> : (
-            <ul className="divide-y divide-line text-sm">{invoices.map((i) => <li key={i.id} className="flex justify-between py-2.5"><span className="num">{i.number} <span className="text-ink-3">· {i.periodStart.toLocaleDateString("en-GB")}</span></span><span className="flex items-center gap-2"><StatusPill status={i.status === "DUE" ? "PENDING" : i.status} /><span className="num">{formatMoney(i.amountPaisa)}</span></span></li>)}</ul>
+            <ul className="divide-y divide-line text-sm">{invoices.map((i) => <li key={i.id} className="flex justify-between py-2.5"><span className="num">{i.number} <span className="text-ink-3">· {formatDate(i.periodStart, { day: "2-digit", month: "2-digit", year: "numeric" }, g.timezone)}</span></span><span className="flex items-center gap-2"><StatusPill status={i.status === "DUE" ? "PENDING" : i.status} /><span className="num">{formatMoney(i.amountPaisa)}</span></span></li>)}</ul>
           )}</CardBody>
         </Card>
       </>

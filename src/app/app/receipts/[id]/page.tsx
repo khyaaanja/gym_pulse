@@ -4,6 +4,7 @@ import { prisma } from "@/db/client";
 import { formatMoney } from "@/lib/money";
 import { Card, CardBody } from "@/components/ui/card";
 import { PrintButton } from "./print-button";
+import { formatDate } from "@/lib/time";
 
 export const metadata = { title: "Receipt" };
 
@@ -31,7 +32,7 @@ export default async function Receipt({ params }: PageProps<"/app/receipts/[id]"
           </div>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div><dt className="text-ink-3">Receipt</dt><dd className="num font-medium">{payment.invoice.number}</dd></div>
-            <div><dt className="text-ink-3">Date</dt><dd className="font-medium">{payment.invoice.issuedAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</dd></div>
+            <div><dt className="text-ink-3">Date</dt><dd className="font-medium">{formatDate(payment.invoice.issuedAt, { day: "numeric", month: "long", year: "numeric" }, gym.timezone)}</dd></div>
             <div><dt className="text-ink-3">Member</dt><dd className="font-medium">{payment.member?.fullName}</dd></div>
             <div><dt className="text-ink-3">Paid with</dt><dd className="font-medium">{payment.provider ? { esewa: "eSewa", khalti: "Khalti", sandbox: "Test gateway" }[payment.provider] ?? payment.provider : payment.method.replace("_", " ").toLowerCase()}</dd></div>
           </dl>

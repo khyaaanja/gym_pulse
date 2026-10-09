@@ -91,7 +91,7 @@ export async function StaffMarket({ ctx, tab }: { ctx: GymContext; tab: string }
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
-                  <Td className="num whitespace-nowrap">{o.number}<span className="block text-xs text-ink-3">{o.placedAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span></Td>
+                  <Td className="num whitespace-nowrap">{o.number}<span className="block text-xs text-ink-3">{formatDate(o.placedAt, { day: "numeric", month: "short" }, ctx.gym.timezone)}</span></Td>
                   <Td><Link href={`/app/members/${o.member.id}`} className="hover:underline">{o.member.fullName}</Link></Td>
                   <Td className="text-ink-2">{o.items.map((i) => `${i.name} ×${i.quantity}`).join(", ")}</Td>
                   <Td><StatusPill status={o.status} /></Td>
