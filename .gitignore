@@ -51,3 +51,22 @@ next-env.d.ts
 /playwright-report/
 /test-results/
 /baseline-trace.zip
+
+# Kept on disk, not in the repository: reports, review notes, office exports, QA evidence and local tool config.
+/.claude/
+/handoff*.md
+/COMPLETION_CHECKLIST.md
+/GymPulse-Full-Test-Report.md
+/GymPulse-Roadmap-and-Go-To-Market.md
+/NGROK-ISSUES-REPORT.md
+/review100x.*
+/notcompleted.pdf
+/tech-stack.pdf
+/documentation.docx
+/generate_docx.py
+/documents/qa-2026-10-02/
+# health-check-proof: only the register files and answer keys that tests/records-check.test.ts reads stay tracked.
+/documents/health-check-proof/*
+!/documents/health-check-proof/Attendance Register August 2026.xlsx
+!/documents/health-check-proof/truth-2026-08.json
+!/documents/health-check-proof/three/

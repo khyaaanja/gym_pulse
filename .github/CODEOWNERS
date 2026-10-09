@@ -1,0 +1,9 @@
+# Enforced once a branch ruleset on main requires code-owner review.
+*                          @khyaaanja
+/.github/                  @khyaaanja
+/Dockerfile                @khyaaanja
+/scripts/deploy.sh         @khyaaanja
+/prisma/migrations/        @khyaaanja
+/src/lib/auth/             @khyaaanja
+/src/services/payments/    @khyaaanja
+/src/config/env.ts         @khyaaanja

@@ -1,0 +1,177 @@
+name: deploy
+
+# Continuous delivery.
+#
+#   push to main ─► ci (all jobs green) ─► publish image ghcr.io/<owner>/<repo>:<commit sha> ─► staging (automatic)
+#   production: only by hand (Actions ► deploy ► Run workflow), naming a commit SHA that is already published.
+#
+# Safety rails:
+# - Only commits whose ci run succeeded on a push to main are ever built into an image. The workflow definition
+#   that runs is always the one on main, so a pull request cannot change what deploys.
+# - Deploy jobs do nothing until the environment is switched on (repository variables STAGING_DEPLOY_ENABLED /
+#   PRODUCTION_DEPLOY_ENABLED = true) and its secrets exist. Secrets live in the GitHub *environment*, not the repo.
+# - Production is never automatic. The manual run is the approval; on a plan that supports it, also add yourself as
+#   a required reviewer on the `production` environment.
+# - One deploy per environment at a time, never cancelled half-way.
+# - Rollback = run this workflow by hand with an older SHA.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Where to deploy
+        type: choice
+        options: [staging, production]
+        required: true
+      sha:
+        description: Full 40-character commit SHA of an already-published image (see the publish job of an earlier run)
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  publish:
+    name: publish image
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha: ${{ steps.vars.outputs.sha }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - id: vars
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "bad sha"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${REPO,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.vars.outputs.sha }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tagged only with the immutable commit SHA: there is no `latest`, so what runs is always explicit.
+      - id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.sha }}
+          build-args: APP_ENV=production
+          provenance: mode=max
+          sbom: true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.vars.outputs.sha }}
+
+      - name: Summary
+        env:
+          IMAGE: ${{ steps.vars.outputs.image }}
+          SHA: ${{ steps.vars.outputs.sha }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "### Published"
+            echo "\`${IMAGE}:${SHA}\`"
+            echo
+            echo "digest \`${DIGEST}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  staging:
+    name: deploy staging
+    needs: publish
+    if: needs.publish.result == 'success' && vars.STAGING_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ vars.APP_URL }}
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.publish.outputs.sha }}
+          persist-credentials: false
+      - name: Deploy
+        env:
+          TAG: ${{ needs.publish.outputs.sha }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: scripts/deploy.sh
+
+  # Manual deploy of an existing image: production releases, staging re-deploys, and rollbacks.
+  manual:
+    name: deploy ${{ inputs.environment }} (manual)
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      ((inputs.environment == 'production' && vars.PRODUCTION_DEPLOY_ENABLED == 'true') ||
+       (inputs.environment == 'staging' && vars.STAGING_DEPLOY_ENABLED == 'true'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.APP_URL }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check the requested image exists
+        env:
+          SHA: ${{ inputs.sha }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-character lowercase commit SHA"; exit 1; }
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker buildx imagetools inspect "ghcr.io/${REPO,,}:${SHA}"
+          docker logout ghcr.io
+
+      # The deploy script comes from main (this run), not from the old commit being rolled back to.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Deploy
+        env:
+          TAG: ${{ inputs.sha }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: scripts/deploy.sh
