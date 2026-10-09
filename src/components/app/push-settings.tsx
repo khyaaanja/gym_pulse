@@ -31,7 +31,9 @@ async function detect(): Promise<State> {
   if (isIos() && !isStandalone()) return { kind: "ios-install" };
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return { kind: "unsupported" };
   const reg = await navigator.serviceWorker.getRegistration("/");
-  const sub = await reg?.pushManager.getSubscription();
+  // No subscription can exist without permission, so only ask then. WebKit builds without a push backend (WPE, and
+  // likely WebKitGTK browsers) reload the page when getSubscription() is called.
+  const sub = Notification.permission === "granted" ? await reg?.pushManager.getSubscription() : null;
   const setup = await api<Setup>(`/api/push${sub ? `?endpoint=${encodeURIComponent(sub.endpoint)}` : ""}`);
   if (!setup.configured || !setup.publicKey) return { kind: "not-configured" };
   if (Notification.permission === "denied") return { kind: "blocked" };
