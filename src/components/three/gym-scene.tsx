@@ -93,6 +93,7 @@ function start(el: HTMLDivElement, mode: "page" | "panel", setPhase: (p: Phase) 
     return () => {
       cancelAnimationFrame(r);
       clearTimeout(rest);
+      cancelLoopRetry(el);
     };
   }
   let disposed = false;
@@ -149,6 +150,7 @@ function start(el: HTMLDivElement, mode: "page" | "panel", setPhase: (p: Phase) 
     disposed = true;
     ac.abort();
     clearTimeout(rest);
+    cancelLoopRetry(el);
     cleanup();
   };
 }
@@ -294,23 +296,47 @@ const MP4 = 'video/mp4; codecs="avc1.640028"';
 const WEBM = 'video/webm; codecs="vp9"';
 /** Play or pause the stage's opening loop. A loop with no source (reduced motion) just rejects: nothing to do. */
 const loopOf = (el: HTMLElement) => el.querySelector<HTMLVideoElement>("video.gym-loop");
-/** Whether the stage still shows its opening loop: not under the live film, and not hidden behind a chapter still. */
-const loopShown = (el: HTMLElement) => el.isConnected && !el.hasAttribute("data-gym-live") && !el.hasAttribute("data-gym-posters");
-/** Events that count as a user gesture for media playback (a touch that only scrolled doesn't, in either engine). */
-const GESTURES = ["touchend", "click", "keydown"] as const;
+/** Whether the stage still wants its opening loop playing: on the page, not under the live film or a chapter still,
+ *  and motion not turned off meanwhile (the <source> was picked at load, so the loop would still play). */
+const loopWanted = (el: HTMLElement) =>
+  el.isConnected && !el.hasAttribute("data-gym-live") && !el.hasAttribute("data-gym-posters") && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** Events that can count as a user gesture for media playback. A touch that only scrolled fires touchend but isn't
+ *  one, so a refused retry keeps listening. */
+const GESTURES = ["touchend", "pointerup", "click", "keydown"] as const;
+/** One pending gesture retry per stage. */
+const retries = new WeakMap<HTMLElement, AbortController>();
+const cancelLoopRetry = (el: HTMLElement) => {
+  retries.get(el)?.abort();
+  retries.delete(el);
+};
+/**
+ * Some phones refuse even muted autoplay (iOS in Low Power Mode, some battery savers) and ignore `autoplay` too: the
+ * opening then sat on its poster with no motion at all. Their rule is "after a gesture", so retry on the reader's
+ * taps and keys until a play succeeds or the loop is no longer wanted. The stage's cleanup cancels it (start()).
+ */
+function retryOnGesture(el: HTMLElement) {
+  if (retries.has(el)) return;
+  const ac = new AbortController();
+  retries.set(el, ac);
+  let trying = false;
+  const retry = () => {
+    const v = loopOf(el);
+    if (!v || !loopWanted(el) || !v.paused) return cancelLoopRetry(el);
+    if (trying) return;
+    trying = true;
+    // play() is called inside the handler, while the gesture still counts.
+    v.play()
+      .then(() => cancelLoopRetry(el))
+      .catch(() => undefined) // still refused (that touch was a scroll): keep listening
+      .finally(() => { trying = false; });
+  };
+  GESTURES.forEach((g) => window.addEventListener(g, retry, { capture: true, passive: true, signal: ac.signal }));
+}
 const playLoop = (el: HTMLElement) => {
   const v = loopOf(el);
   if (!v?.paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   v.play().catch((e: unknown) => {
-    // Some phones refuse even muted autoplay (iOS in Low Power Mode, some battery savers) and also ignore `autoplay`:
-    // the opening then sat on its poster with no motion at all. Their rule is "after a gesture", so try once more on
-    // the reader's first tap or key, if the loop is still the thing on screen by then.
-    if (!(e instanceof DOMException && e.name === "NotAllowedError")) return;
-    const retry = () => {
-      GESTURES.forEach((g) => window.removeEventListener(g, retry, true));
-      if (loopShown(el)) loopOf(el)?.play().catch(() => undefined);
-    };
-    GESTURES.forEach((g) => window.addEventListener(g, retry, { capture: true, passive: true }));
+    if (e instanceof DOMException && e.name === "NotAllowedError" && loopWanted(el)) retryOnGesture(el);
   });
 };
 const pauseLoop = (el: HTMLElement) => loopOf(el)?.pause();
