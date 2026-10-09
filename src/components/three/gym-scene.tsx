@@ -84,7 +84,7 @@ function start(el: HTMLDivElement, mode: "page" | "panel", setPhase: (p: Phase) 
     setPhase("posters");
     // A panel has no poster film to hand over to: on a machine without a real GPU its loop (decoded on the CPU) plays
     // three reps, then rests on its last frame.
-    if (mode === "panel") rest = window.setTimeout(() => pauseLoop(el), 3 * LOOP_SECONDS * 1000);
+    if (mode === "panel") rest = window.setTimeout(() => restAtEnd(el), 3 * LOOP_SECONDS * 1000);
   };
   const tier = gpuTier();
   if (tier === "software" || tier === "none") {
@@ -189,6 +189,18 @@ function OpeningPoster({ mode, priority }: { mode: "page" | "panel"; priority: b
 function OpeningLoop({ mode, autoPlay }: { mode: "page" | "panel"; autoPlay: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
+    // Stall recovery (see below).
+    let last = -1;
+    let failed = 0;
+    let copy: string | null = null;
+    let copying = false;
+    const unstick = () => {
+      if (!copy) return;
+      // On unmount React has already cleared the ref: the copy is still released.
+      ref.current?.removeAttribute("src");
+      URL.revokeObjectURL(copy);
+      copy = null;
+    };
     // A video picks its <source> once: on a turn between portrait and landscape, pick again (the poster under it
     // switches by itself), and carry on playing only if it was.
     const mq = window.matchMedia(PORTRAIT);
@@ -197,12 +209,56 @@ function OpeningLoop({ mode, autoPlay }: { mode: "page" | "panel"; autoPlay: boo
       // Under the live film the loop is hidden for good: fetching the other shape would be wasted bytes.
       if (!v || v.parentElement?.hasAttribute("data-gym-live")) return;
       const playing = !v.paused;
+      unstick(); // back to the <source> list, so the new shape is picked
       v.load();
       if (playing) v.play().catch(() => undefined);
       else v.pause(); // also cancels `autoplay`, so a loop hidden under the film stays stopped
     };
     onChange(mq, repick);
-    return () => offChange(mq, repick);
+    // Some WebKit builds stall at the loop point instead of wrapping: still "playing", but the time sits at the end
+    // and the lifter freezes mid-rep. Seeking back doesn't recover them; reloading does (its first frame is the
+    // poster's, so nothing jumps). But their media loader skips the HTTP cache on load() and would fetch the whole
+    // file again every rep, so the first stall copies the file into memory once (one more download) and every
+    // reload after that plays from the copy, with no network. Where looping works none of this runs: the time never
+    // holds at the end for a whole look.
+    const restart = (v: HTMLVideoElement) => {
+      v.load();
+      v.play().catch(() => undefined);
+    };
+    const watch = window.setInterval(() => {
+      const v = ref.current;
+      if (!v || !v.loop || v.paused || v.seeking || document.hidden || copying) { last = -1; return; }
+      if (v.currentTime === last && v.duration > 0 && v.currentTime >= v.duration - 0.1) {
+        last = -1;
+        if (copy) return restart(v);
+        copying = true;
+        const from = v.currentSrc;
+        fetch(from)
+          .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+          .then((blob) => {
+            // Still the same video, and still wanted (not turned, unmounted, or paused meanwhile).
+            if (ref.current !== v || v.currentSrc !== from || v.paused) return;
+            copy = URL.createObjectURL(blob);
+            v.src = copy; // an src attribute takes over from the <source> list
+            restart(v);
+          })
+          // No copy: a plain reload (one more download). After three failures, no more fetches or reloads, and looping
+          // goes off: left on, a stalled WebKit loop re-requests the file every rep by itself.
+          .catch(() => {
+            if (ref.current !== v) return; // gone meanwhile: nothing to restart
+            if (++failed <= 2) restart(v);
+            else v.loop = false;
+          })
+          .finally(() => { copying = false; });
+        return;
+      }
+      last = v.currentTime;
+    }, 400);
+    return () => {
+      offChange(mq, repick);
+      window.clearInterval(watch);
+      unstick();
+    };
   }, []);
   // Panels are card-sized: their copies are smaller (as their posters are).
   const src = (shape: "portrait" | "landscape", ext: "mp4" | "webm") => `/gym/${OPENING}-loop-${shape}${mode === "panel" ? "-panel" : ""}.${ext}`;
@@ -243,6 +299,12 @@ const playLoop = (el: HTMLElement) => {
   if (v?.paused && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) v.play().catch(() => undefined);
 };
 const pauseLoop = (el: HTMLElement) => loopOf(el)?.pause();
+/** Let the loop finish its current rep and rest on its last frame: looping off, so it plays to the end and stops there.
+ *  (A timer alone can stop mid-rep where a rep runs long, as in a WebKit stall at the loop point: see OpeningLoop.) */
+function restAtEnd(el: HTMLElement) {
+  const v = loopOf(el);
+  if (v) v.loop = false;
+}
 
 const PORTRAIT = "(max-aspect-ratio: 9/10)";
 /** The opening shot (chapter one's lift and shot): its poster and its loop. */
