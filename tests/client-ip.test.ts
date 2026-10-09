@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { clientIp } from "@/lib/client-ip";
 import { POST as forgotPassword } from "@/app/api/auth/password/forgot/route";
@@ -22,6 +22,42 @@ describe("client IP", () => {
 
   it("returns null without a forwarded address", () => {
     expect(clientIp(h())).toBeNull();
+  });
+
+  it("with no proxy (0) ignores the header, which the client controls entirely", () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+    expect(clientIp(h("6.6.6.6"))).toBeNull();
+    expect(clientIp(h("6.6.6.6, 7.7.7.7"))).toBeNull();
+  });
+});
+
+describe("production proxy configuration", () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    process.env = { ...saved };
+    vi.resetModules();
+  });
+  const prodEnv = async (hops: string | undefined) => {
+    vi.resetModules();
+    process.env = { ...saved, APP_ENV: "production", APP_URL: "https://app.example.test", EMAIL_TRANSPORT: "none", ALLOW_ADMIN_WITHOUT_MFA: "false", ENABLE_TEST_GATEWAY: "false" };
+    if (hops === undefined) delete process.env.TRUSTED_PROXY_HOPS;
+    else process.env.TRUSTED_PROXY_HOPS = hops;
+    const { env } = await import("@/config/env");
+    return () => env();
+  };
+
+  it("refuses to start when TRUSTED_PROXY_HOPS is left to its default", async () => {
+    expect(await prodEnv(undefined)).toThrow(/TRUSTED_PROXY_HOPS explicitly/);
+    expect(await prodEnv("")).toThrow(/TRUSTED_PROXY_HOPS explicitly/);
+  });
+
+  it("refuses to start without a proxy (0)", async () => {
+    expect(await prodEnv("0")).toThrow(/reverse proxy/);
+  });
+
+  it("starts with an explicit proxy count", async () => {
+    expect((await prodEnv("1"))().TRUSTED_PROXY_HOPS).toBe(1);
+    expect((await prodEnv("2"))().TRUSTED_PROXY_HOPS).toBe(2);
   });
 });
 

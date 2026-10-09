@@ -17,7 +17,7 @@ const schema = z.object({
   // The test payment gateway lets members approve their own payments. Local development/demo only.
   ENABLE_TEST_GATEWAY: z.enum(["true", "false"]).default("false"),
   // How many reverse proxies sit in front of the app and append to X-Forwarded-For. The client IP is read that many
-  // entries from the right; anything further left is client-supplied and ignored.
+  // entries from the right; anything further left is client-supplied and ignored. 0 = no proxy: the header is ignored.
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   OCR_PROVIDER: z.enum(["tesseract", "none"]).default("none"),
   TESSERACT_LANG_PATH: z.string().optional(),
@@ -54,6 +54,9 @@ export function env(): Env {
     if (value.ALLOW_ADMIN_WITHOUT_MFA === "true") throw new Error("ALLOW_ADMIN_WITHOUT_MFA must be false in production");
     if (value.EMAIL_TRANSPORT === "console") throw new Error("EMAIL_TRANSPORT=console is not allowed in production");
     if (value.ENABLE_TEST_GATEWAY === "true") throw new Error("ENABLE_TEST_GATEWAY must be false in production");
+    // The default (1) suits development; in production it must be a deliberate statement about the deployment,
+    // or a server exposed without a proxy would trust whatever X-Forwarded-For a client sends.
+    if (!process.env.TRUSTED_PROXY_HOPS?.trim()) throw new Error("Set TRUSTED_PROXY_HOPS explicitly in production: the number of reverse proxies in front of the app (1 for a single Caddy/nginx)");
     if (value.TRUSTED_PROXY_HOPS < 1) throw new Error("Run behind a reverse proxy in production (TRUSTED_PROXY_HOPS >= 1): without one, client IPs can be spoofed and per-IP rate limits don't hold");
     if (!value.APP_URL.startsWith("https://")) throw new Error("APP_URL must be https in production");
   }
