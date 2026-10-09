@@ -294,9 +294,24 @@ const MP4 = 'video/mp4; codecs="avc1.640028"';
 const WEBM = 'video/webm; codecs="vp9"';
 /** Play or pause the stage's opening loop. A loop with no source (reduced motion) just rejects: nothing to do. */
 const loopOf = (el: HTMLElement) => el.querySelector<HTMLVideoElement>("video.gym-loop");
+/** Whether the stage still shows its opening loop: not under the live film, and not hidden behind a chapter still. */
+const loopShown = (el: HTMLElement) => el.isConnected && !el.hasAttribute("data-gym-live") && !el.hasAttribute("data-gym-posters");
+/** Events that count as a user gesture for media playback (a touch that only scrolled doesn't, in either engine). */
+const GESTURES = ["touchend", "click", "keydown"] as const;
 const playLoop = (el: HTMLElement) => {
   const v = loopOf(el);
-  if (v?.paused && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) v.play().catch(() => undefined);
+  if (!v?.paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  v.play().catch((e: unknown) => {
+    // Some phones refuse even muted autoplay (iOS in Low Power Mode, some battery savers) and also ignore `autoplay`:
+    // the opening then sat on its poster with no motion at all. Their rule is "after a gesture", so try once more on
+    // the reader's first tap or key, if the loop is still the thing on screen by then.
+    if (!(e instanceof DOMException && e.name === "NotAllowedError")) return;
+    const retry = () => {
+      GESTURES.forEach((g) => window.removeEventListener(g, retry, true));
+      if (loopShown(el)) loopOf(el)?.play().catch(() => undefined);
+    };
+    GESTURES.forEach((g) => window.addEventListener(g, retry, { capture: true, passive: true }));
+  });
 };
 const pauseLoop = (el: HTMLElement) => loopOf(el)?.pause();
 /** Let the loop finish its current rep and rest on its last frame: looping off, so it plays to the end and stops there.
