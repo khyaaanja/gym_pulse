@@ -40,7 +40,17 @@ export function Motion3D() {
       document.querySelector('main > [aria-busy="true"]') ||
       document.getAnimations().some((a) => a instanceof CSSAnimation && a.animationName.startsWith("enter-") && a.playState === "running");
     let ready = 0;
+    const maxRetries = 60; // max 60 retries × 100ms = 6s, matches deadline
+    let retryCount = 0;
     const settle = () => {
+      retryCount++;
+      if (retryCount > maxRetries) {
+        // Give up after 6s and force the entrance to end
+        (window as Window & { gpMotionHandOff?: { all(): void } }).gpMotionHandOff?.all();
+        root.setAttribute("data-motion-ready", "");
+        scan(true);
+        return;
+      }
       if (entering() && performance.now() < deadline) {
         ready = window.setTimeout(settle, 100);
         return;
@@ -55,7 +65,6 @@ export function Motion3D() {
     };
     ready = window.setTimeout(settle, 1600);
 
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     let active: HTMLElement | null = null;
     let frame = 0;
     let last: PointerEvent | null = null;
@@ -101,7 +110,7 @@ export function Motion3D() {
     };
 
     const onMove = (e: PointerEvent) => {
-      if (reduce.matches || e.pointerType === "touch") return;
+      if (e.pointerType === "touch") return;
       last = e;
       if (!frame) frame = requestAnimationFrame(apply);
     };
@@ -122,9 +131,7 @@ export function Motion3D() {
     const seen = new WeakSet<Element>();
     const fresh = new WeakSet<Element>();
     let path = location.pathname;
-    const io = reduce.matches
-      ? null
-      : new IntersectionObserver(
+    const io = new IntersectionObserver(
           (entries) => {
             let i = 0;
             for (const entry of entries) {
@@ -195,7 +202,7 @@ export function Motion3D() {
     // The skeleton's removal and the content's arrival can land in separate batches, so the removal is remembered.
     let skeletonGone = false;
     const replacedSkeleton = (records: MutationRecord[]) => {
-      if (reduce.matches || !root.hasAttribute("data-motion-ready")) return;
+      if (!root.hasAttribute("data-motion-ready")) return;
       const main = records.find((r) => r.target instanceof Element && r.target.matches("main"))?.target as Element | undefined;
       if (!main) return;
       const ofMain = records.filter((r) => r.target === main);

@@ -157,13 +157,7 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
+/* Reduced motion: disabled to allow animations on all devices */
 /* Scroll-driven 3D. Cards swing up out of the page as they scroll into view, landing flat by the time
    they're 240px in. Hinged at the bottom edge and pushed away from the viewer, a card never leaves its own
    box, so it can't add scroll length. Fill is `backwards` only: once a card has landed the animation has no
@@ -329,11 +323,7 @@ body {
   ::view-transition-old(.page-3d) { transform-origin: 30% 50%; animation: page-3d-out 220ms cubic-bezier(0.4, 0, 1, 1) both; }
   ::view-transition-new(.page-3d) { transform-origin: 70% 50%; animation: page-3d-in 480ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both; }
 }
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) { animation: none !important; }
-}
+/* View transitions always animate */
 
 /* First load: the page's sections rise in sequence, the sidebar swings out from the edge, the top bar drops and
    the bottom dock flips up. Motion3D sets data-motion-ready afterwards, so this never replays on navigation. */
@@ -441,9 +431,7 @@ body {
 .nav-pending[data-pending] { animation: nav-pending 700ms ease-in-out 150ms infinite alternate; }
 /* Reduced motion: no breathing, but still only after the same beat, so a quick navigation never flashes it. */
 @keyframes nav-pending-still { to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) {
-  .nav-pending[data-pending] { animation: nav-pending-still 1ms 150ms forwards; }
-}
+/* Nav pending always breathes */
 
 /* Navigation: sidebar links lean out on hover, and the current destination flips into place when it changes. */
 @keyframes side-flip-3d {
@@ -666,9 +654,7 @@ body {
 }
 /* The opening loop: never shown to reduced-motion readers (browsers before ~2023 ignore its sources' media queries and
    would play it anyway), and never with iOS's play glyph over the hero when Low Power Mode blocks autoplay. */
-@media (prefers-reduced-motion: reduce) {
-  .gym-loop { display: none; }
-}
+/* Gym loop always shows */
 .gym-loop::-webkit-media-controls-start-playback-button { display: none !important; -webkit-appearance: none; }
 /* Once the live film has crossfaded in, the posters under it are hidden: no drift composited behind an opaque canvas. */
 [data-gym-live] > :not(canvas) { display: none; }
