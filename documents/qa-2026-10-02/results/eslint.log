@@ -1,0 +1,29 @@
+
+/home/kali-linux/Desktop/gym/src/app/api/admin/security/route.ts
+  19:90  warning  '_t' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kali-linux/Desktop/gym/src/app/api/gym/imports/[id]/route.ts
+  16:23  warning  '_k' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  16:35  warning  '_s' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/kali-linux/Desktop/gym/src/app/api/gym/staff/route.ts
+  11:125  warning  '_t' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kali-linux/Desktop/gym/src/app/app/settings/page.tsx
+  92:29  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/home/kali-linux/Desktop/gym/src/components/app/kiosk-qr.tsx
+  38:65  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/home/kali-linux/Desktop/gym/src/components/app/member-pass.tsx
+  33:72  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/home/kali-linux/Desktop/gym/src/components/app/mfa-setup.tsx
+  15:7  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/home/kali-linux/Desktop/gym/src/components/app/shop.tsx
+  72:58  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+✖ 9 problems (0 errors, 9 warnings)
+
+eslint exit 0

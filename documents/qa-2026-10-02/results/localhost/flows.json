@@ -1,0 +1,512 @@
+[
+ {
+  "name": "login: wrong password shows error, stays on /login",
+  "ok": true,
+  "ms": 3298,
+  "note": "form text: Email or phone Password That email/phone and password don't match. Sign in",
+  "url": "/login",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "api": [
+   "401 POST /api/auth/login"
+  ],
+  "shot": "out/localhost/flows/00-login_wrong_password_shows_error_stays_on_login.png"
+ },
+ {
+  "name": "login: unknown account message identical to wrong password (no enumeration)",
+  "ok": true,
+  "ms": 183,
+  "note": "{\"error\":{\"code\":\"invalid_credentials\",\"message\":\"That email/phone and password don't match.\"}}",
+  "url": "/login",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "api": [
+   "401 POST /api/auth/login",
+   "401 POST /api/auth/login"
+  ],
+  "shot": "out/localhost/flows/01-login_unknown_account_message_identical_to_wrong_p.png"
+ },
+ {
+  "name": "login: empty submit shows validation, no request crash",
+  "ok": true,
+  "ms": 1535,
+  "note": "Email or phone Password Sign in",
+  "url": "/login",
+  "exc": [],
+  "con": [],
+  "api": [],
+  "shot": "out/localhost/flows/02-login_empty_submit_shows_validation_no_request_cra.png"
+ },
+ {
+  "name": "forgot password: submit shows neutral confirmation",
+  "ok": true,
+  "ms": 3206,
+  "note": "GymPulse Reset your password We'll send a reset link to your email or phone. Email or phone Too many attempts. Please wait a moment and try again. Send reset link Every morning: who to call, what's at",
+  "url": "/forgot-password",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+  ],
+  "api": [
+   "429 POST /api/auth/password/forgot"
+  ],
+  "shot": "out/localhost/flows/03-forgot_password_submit_shows_neutral_confirmation.png"
+ },
+ {
+  "name": "reset password: bogus token rejected",
+  "ok": true,
+  "ms": 3197,
+  "note": "GymPulse Choose a new password You'll be signed out of other devices. New password At least 10 characters. Too small: expected string to have >=20 characters Save password Every morning: who to call, ",
+  "url": "/reset-password?token=bogus-token-123",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+  ],
+  "api": [
+   "400 POST /api/auth/password/reset"
+  ],
+  "shot": "out/localhost/flows/04-reset_password_bogus_token_rejected.png"
+ },
+ {
+  "name": "signup: weak password rejected",
+  "ok": true,
+  "ms": 3132,
+  "note": "fields=gymName:text,city:text,ownerName:text,email:email,phone:tel,password:password → Gym name City Your name Email Mobile Nepal mobile, e.g. 98XXXXXXXX Password At least 10 characters. Too many attempts. Please wait a moment and try again. Create gym",
+  "url": "/signup",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+  ],
+  "api": [
+   "429 POST /api/auth/signup"
+  ],
+  "shot": "out/localhost/flows/05-signup_weak_password_rejected.png"
+ },
+ {
+  "name": "signup: strong password creates gym and lands in app",
+  "ok": false,
+  "ms": 30068,
+  "note": "page.waitForURL: Timeout 30000ms exceeded.",
+  "url": "/signup",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+  ],
+  "api": [
+   "429 POST /api/auth/signup"
+  ],
+  "shot": "out/localhost/flows/06-signup_strong_password_creates_gym_and_lands_in_ap.png"
+ },
+ {
+  "name": "signup: new owner sees onboarding/empty state without errors",
+  "ok": true,
+  "ms": 1686,
+  "note": "GymPulse Sign in Gym owners, staff, trainers and members all sign in here. Email or phone Password Sign in Forgot your password?·New gym? Start a free trial Every morning: who to call, what's at stake",
+  "url": "/login",
+  "exc": [],
+  "con": [],
+  "api": [],
+  "shot": "out/localhost/flows/07-signup_new_owner_sees_onboarding_empty_state_witho.png"
+ },
+ {
+  "name": "signup: duplicate email rejected",
+  "ok": true,
+  "ms": 22,
+  "note": "429 {\"error\":{\"code\":\"rate_limited\",\"message\":\"Too many attempts. Please wait a moment and try again.\"}}",
+  "url": "/login",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 429 (Too Many Requests)"
+  ],
+  "api": [
+   "429 POST /api/auth/signup"
+  ],
+  "shot": "out/localhost/flows/08-signup_duplicate_email_rejected.png"
+ },
+ {
+  "name": "owner: login via UI",
+  "ok": true,
+  "ms": 945,
+  "note": "http://localhost:3000/app",
+  "url": "/app",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 POST /api/auth/login"
+  ],
+  "shot": "out/localhost/flows/09-owner_login_via_UI.png"
+ },
+ {
+  "name": "owner: add member via dialog",
+  "ok": true,
+  "ms": 1687,
+  "note": "Member added",
+  "url": "/app/members",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 POST /api/gym/members"
+  ],
+  "shot": "out/localhost/flows/10-owner_add_member_via_dialog.png"
+ },
+ {
+  "name": "owner: XSS payload in member name is rendered as text",
+  "ok": true,
+  "ms": 2379,
+  "note": "not executed",
+  "url": "/app/members?q=QA%20%3Cimg",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 POST /api/gym/members",
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/11-owner_XSS_payload_in_member_name_is_rendered_as_te.png"
+ },
+ {
+  "name": "owner: member search finds the new member",
+  "ok": true,
+  "ms": 165,
+  "note": "found",
+  "url": "/app/members?q=QA%20Member%20Lxaqap",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/12-owner_member_search_finds_the_new_member.png"
+ },
+ {
+  "name": "owner: open member detail page",
+  "ok": true,
+  "ms": 114,
+  "note": "/app/members/cmupxbu3000dm0scpzzicjwyy",
+  "url": "/app/members/cmupxbu3000dm0scpzzicjwyy",
+  "exc": [],
+  "con": [],
+  "api": [],
+  "shot": "out/localhost/flows/13-owner_open_member_detail_page.png"
+ },
+ {
+  "name": "owner: edit member (Edit dialog)",
+  "ok": true,
+  "ms": 1920,
+  "note": "Saved",
+  "url": "/app/members/cmupxbu3000dm0scpzzicjwyy",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 PATCH /api/gym/members/cmupxbu3000dm0scpzzicjwyy"
+  ],
+  "shot": "out/localhost/flows/14-owner_edit_member_Edit_dialog_.png"
+ },
+ {
+  "name": "owner: check in the new member at desk",
+  "ok": true,
+  "ms": 767,
+  "note": "No active membership. Please choose a plan first.",
+  "url": "/app/attendance",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+  ],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 GET /api/gym/members?q=QA%20Member%20Lxaqap&pageSize=8",
+   "400 POST /api/gym/checkin"
+  ],
+  "shot": "out/localhost/flows/15-owner_check_in_the_new_member_at_desk.png"
+ },
+ {
+  "name": "owner: second check-in same day is handled (no duplicate)",
+  "ok": true,
+  "ms": 290,
+  "note": "No active membership. Please choose a plan first.",
+  "url": "/app/attendance",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/gym/members?q=QA%20Member%20Lxaqap&pageSize=8"
+  ],
+  "shot": "out/localhost/flows/16-owner_second_check_in_same_day_is_handled_no_dupli.png"
+ },
+ {
+  "name": "owner: add plan",
+  "ok": true,
+  "ms": 1102,
+  "note": "fields=name:text,description:text,durationDays:number,priceRupees:number,sortOrder:number,active:checkbox → Too big: expected number to be <=100",
+  "url": "/app/settings?tab=plans",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+  ],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "400 POST /api/gym/plans"
+  ],
+  "shot": "out/localhost/flows/17-owner_add_plan.png"
+ },
+ {
+  "name": "owner: plan with negative price rejected",
+  "ok": true,
+  "ms": 17,
+  "note": "400 {\"error\":{\"code\":\"validation\",\"message\":\"Too small: expected number to be >=0\",\"details\":[{\"path\":\"priceRupees\",\"message\":\"Too small: expected number to be >=0\"}]}}",
+  "url": "/app/settings?tab=plans",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+  ],
+  "api": [
+   "400 POST /api/gym/plans"
+  ],
+  "shot": "out/localhost/flows/18-owner_plan_with_negative_price_rejected.png"
+ },
+ {
+  "name": "owner: new announcement",
+  "ok": true,
+  "ms": 1623,
+  "note": "Announcement saved",
+  "url": "/app/announcements",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 POST /api/gym/announcements"
+  ],
+  "shot": "out/localhost/flows/19-owner_new_announcement.png"
+ },
+ {
+  "name": "owner: record payment from Renew (double-click submit → one payment)",
+  "ok": true,
+  "ms": 464,
+  "note": "no renewals due — skipped",
+  "url": "/app/renew",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/20-owner_record_payment_from_Renew_double_click_submi.png"
+ },
+ {
+  "name": "owner: invite member to app → link host + copy button (clipboard API)",
+  "ok": false,
+  "ms": 3574,
+  "note": "link=http://localhost:3000/invite/lSCt-oBTQ5UIhrBFGn-Qo4TfgxEjo1x7rqmYulEtkJo hostMatches=true exceptions=Failed to execute 'writeText' on 'Clipboard': Write permission denied. toast=Link copied",
+  "url": "/app/members/cmupxbu3000dm0scpzzicjwyy",
+  "exc": [
+   "Failed to execute 'writeText' on 'Clipboard': Write permission denied."
+  ],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 POST /api/gym/members/cmupxbu3000dm0scpzzicjwyy/invite"
+  ],
+  "shot": "out/localhost/flows/21-owner_invite_member_to_app_link_host_copy_button_c.png"
+ },
+ {
+  "name": "owner: kiosk page renders QR",
+  "ok": true,
+  "ms": 1875,
+  "note": "visual elems=25; GymPulse Pulse Fitness Kathmandu Search ⌘K Pulse Attendance Renew Marketplace Manage Overview Members Bookings Know Your Gym Analyze Records Reports A",
+  "url": "/app/kiosk",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/gym/kiosk-token",
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/22-owner_kiosk_page_renders_QR.png"
+ },
+ {
+  "name": "owner: report export download",
+  "ok": true,
+  "ms": 324,
+  "note": "/api/gym/reports/members?range=30d → 200 text/csv; charset=utf-8 24189B",
+  "url": "/app/reports",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 GET /api/gym/reports/members?range=30d"
+  ],
+  "shot": "out/localhost/flows/23-owner_report_export_download.png"
+ },
+ {
+  "name": "owner: global search (Ctrl+K)",
+  "ok": true,
+  "ms": 2465,
+  "note": "Results Member QA Member Lwkebc M-00230 · 9881454449 Member QA Member Lxaqap M-00232 · 9882713127",
+  "url": "/app",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 GET /api/gym/search?q=QA%20Member"
+  ],
+  "shot": "out/localhost/flows/24-owner_global_search_Ctrl_K_.png"
+ },
+ {
+  "name": "owner: sign out ends session (back to /app redirects to login)",
+  "ok": true,
+  "ms": 1882,
+  "note": "redirected to login; /api/auth/me 401",
+  "url": "/login",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 POST /api/auth/logout",
+   "401 GET /api/auth/me"
+  ],
+  "shot": "out/localhost/flows/25-owner_sign_out_ends_session_back_to_app_redirects_.png"
+ },
+ {
+  "name": "invitee(phone): open invite link and set password",
+  "ok": false,
+  "ms": 30659,
+  "note": "page.waitForURL: Timeout 30000ms exceeded.",
+  "url": "/invite/lSCt-oBTQ5UIhrBFGn-Qo4TfgxEjo1x7rqmYulEtkJo",
+  "exc": [],
+  "con": [],
+  "api": [],
+  "shot": "out/localhost/flows/26-invitee_phone_open_invite_link_and_set_password.png"
+ },
+ {
+  "name": "invitee: member home renders",
+  "ok": true,
+  "ms": 1509,
+  "note": "GymPulse Join Pulse Fitness Kathmandu You've been invited as a member. Create your account to continue. Your name Password At least 10 characters. Create accoun",
+  "url": "/invite/lSCt-oBTQ5UIhrBFGn-Qo4TfgxEjo1x7rqmYulEtkJo",
+  "exc": [],
+  "con": [],
+  "api": [],
+  "shot": "out/localhost/flows/27-invitee_member_home_renders.png"
+ },
+ {
+  "name": "trainer: login",
+  "ok": true,
+  "ms": 945,
+  "note": "ok",
+  "url": "/app",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 POST /api/auth/login"
+  ],
+  "shot": "out/localhost/flows/28-trainer_login.png"
+ },
+ {
+  "name": "trainer: blocked from /app/settings",
+  "ok": true,
+  "ms": 155,
+  "note": "→ /app/settings: ",
+  "url": "/app/settings",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/29-trainer_blocked_from_app_settings.png"
+ },
+ {
+  "name": "trainer: blocked from /app/reports",
+  "ok": true,
+  "ms": 152,
+  "note": "→ /app/reports: ",
+  "url": "/app/reports",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/30-trainer_blocked_from_app_reports.png"
+ },
+ {
+  "name": "trainer: blocked from /app/renew",
+  "ok": true,
+  "ms": 174,
+  "note": "→ /app/renew: Renew Memberships ending in the next 14 days, plus anyone still inside the 5-day grace period. Remin",
+  "url": "/app/renew",
+  "exc": [],
+  "con": [],
+  "api": [],
+  "shot": "out/localhost/flows/31-trainer_blocked_from_app_renew.png"
+ },
+ {
+  "name": "trainer: blocked from /app/imports/new",
+  "ok": true,
+  "ms": 146,
+  "note": "→ /app/imports/new: ",
+  "url": "/app/imports/new",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/32-trainer_blocked_from_app_imports_new.png"
+ },
+ {
+  "name": "member(phone): login",
+  "ok": true,
+  "ms": 719,
+  "note": "ok",
+  "url": "/app",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 POST /api/auth/login"
+  ],
+  "shot": "out/localhost/flows/33-member_phone_login.png"
+ },
+ {
+  "name": "member: home shows pass/streak",
+  "ok": true,
+  "ms": 1713,
+  "note": "Namaste, Aarav Pulse Fitness Kathmandu 0day streak Best 21 days S Saturday 2026-09-19: visited S Sunday 2026-09-20: visited M Monday 2026-09-21: visited T Tuesday 2026-09-22: visited W Wednesday 2026-",
+  "url": "/app",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8"
+  ],
+  "shot": "out/localhost/flows/34-member_home_shows_pass_streak.png"
+ },
+ {
+  "name": "member: renew via test gateway",
+  "ok": true,
+  "ms": 5257,
+  "note": "after click → /pay/sandbox/GP-MUPXD4I0-XJLSXJTW | Test mode — no real money is charged. GymPulse Test Gateway · Pulse Fitness Kathmandu ₹1,500 Reference GP-MUPXD4I0-XJLSXJTW Approve payment Decline",
+  "url": "/pay/sandbox/GP-MUPXD4I0-XJLSXJTW",
+  "exc": [],
+  "con": [],
+  "api": [
+   "200 GET /api/notifications?limit=8",
+   "200 POST /api/me/renew"
+  ],
+  "shot": "out/localhost/flows/35-member_renew_via_test_gateway.png"
+ },
+ {
+  "name": "member: cannot call staff API",
+  "ok": true,
+  "ms": 10,
+  "note": "403",
+  "url": "/pay/sandbox/GP-MUPXD4I0-XJLSXJTW",
+  "exc": [],
+  "con": [
+   "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+  ],
+  "api": [
+   "403 GET /api/gym/members"
+  ],
+  "shot": "out/localhost/flows/36-member_cannot_call_staff_API.png"
+ }
+]

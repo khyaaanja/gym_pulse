@@ -1,0 +1,224 @@
+[
+ {
+  "label": "yoga owner GET pulse members/cmujlmobc004759cpjof1k8jl",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse members/cmujlmobc004759cpjof1k8jl",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner POST invite pulse member cmujlmobc004759cpjof1k8jl",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner check-in pulse member cmujlmobc004759cpjof1k8jl",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner manual payment for pulse member cmujlmobc004759cpjof1k8jl",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner GET pulse members/cmujlmz970dmf59cpxit53dib",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse members/cmujlmz970dmf59cpxit53dib",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner POST invite pulse member cmujlmz970dmf59cpxit53dib",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner check-in pulse member cmujlmz970dmf59cpxit53dib",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner manual payment for pulse member cmujlmz970dmf59cpxit53dib",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Member not found.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse announcements/cmupxc1dr00dt0scpf43tlb99",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse announcements/cmupwmd8900600scpeeds847v",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse bookings/cmul68uge00g5qqcpvtah7ydr",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse bookings/cmujlmv7w0cmg59cpky0rcjlm",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse locations/cmujlmo4t002s59cp8h8cdita",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse plans/cmujlmo6z003359cpiwfolccw",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse plans/cmujlmo75003459cpn59jcjkt",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse products/cmujlmv4b0cl559cpd17gfxoa",
+  "status": 403,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"feature_disabled\",\"message\":\"marketplace isn't available on your plan.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse products/cmujlmv4o0cl859cp6p7clxaa",
+  "status": 403,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"feature_disabled\",\"message\":\"marketplace isn't available on your plan.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse staff/cmujlmo6c002y59cp3r39u2oq",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner PATCH {} pulse staff/cmujlmo6j002z59cpz1fr3ui5",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner GET pulse recovery/cmupwwo3r00bq0scp47iw00gw",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner POST {} pulse recovery/cmupwwo3r00bq0scp47iw00gw",
+  "status": 400,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"validation\",\"message\":\"Invalid discriminator value. Expected 'contact' | 'message' | 'returned' | 'lost' | 'note'\",\"details\":[{\"path\":\"action\""
+ },
+ {
+  "label": "yoga owner GET pulse recovery/cmupwwnv300bk0scp4irfl2f1",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner POST {} pulse recovery/cmupwwnv300bk0scp4irfl2f1",
+  "status": 400,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"validation\",\"message\":\"Invalid discriminator value. Expected 'contact' | 'message' | 'returned' | 'lost' | 'note'\",\"details\":[{\"path\":\"action\""
+ },
+ {
+  "label": "yoga owner GET pulse predictions/cmuorq14s0060ticpjtxbb694",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner GET pulse predictions/cmumg6u1s003r2ccpdybcg080",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "yoga owner POST {} pulse orders/cmul68qx900g1qqcp7wkf4nyp",
+  "status": 403,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"feature_disabled\",\"message\":\"marketplace isn't available on your plan.\"}}"
+ },
+ {
+  "label": "yoga owner POST {} pulse orders/cmujlmv5p0clk59cpomph7x4y",
+  "status": 403,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"feature_disabled\",\"message\":\"marketplace isn't available on your plan.\"}}"
+ },
+ {
+  "label": "yoga owner GET pulse imports/cmumg6px300322ccpbcjr1cvt",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Import not found.\"}}"
+ },
+ {
+  "label": "yoga owner GET pulse imports/cmumbwf410038bdcpomzakshr",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"Import not found.\"}}"
+ },
+ {
+  "label": "pulse member notes unchanged after yoga PATCH",
+  "pass": true
+ },
+ {
+  "label": "mass-assigned gymId ignored on member create",
+  "pass": true,
+  "status": "create 200, pulse sees 404"
+ },
+ {
+  "label": "pulse owner switch-gym into a foreign gym id",
+  "status": 403,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"forbidden\",\"message\":\"You don't have permission to do that.\"}}"
+ },
+ {
+  "label": "yoga owner DELETE pulse announcement cmupxjst400i50scpy9bjla27",
+  "status": 404,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"not_found\",\"message\":\"We couldn't find that.\"}}"
+ },
+ {
+  "label": "pulse announcement survives yoga DELETE",
+  "pass": true
+ },
+ {
+  "label": "member opens another member's receipt cmupwsjup006v0scpi1kmgt50",
+  "pass": true,
+  "status": 200
+ },
+ {
+  "label": "member pays someone else's order cmujlmv5p0clk59cpomph7x4y",
+  "status": 400,
+  "pass": true,
+  "body": "{\"error\":{\"code\":\"validation\",\"message\":\"Invalid input: expected string, received undefined\",\"details\":[{\"path\":\"provider\",\"message\":\"Invalid input: expected st"
+ }
+]

@@ -1,0 +1,18 @@
+import { chromium } from "playwright";
+const b = await chromium.launch({ channel: "chrome", headless: true });
+const ctx = await b.newContext({ viewport: { width: 1366, height: 860 } }); const p = await ctx.newPage();
+const reqs = []; p.on("response", r => r.url().includes("payments/manual") && reqs.push(`${r.status()}`));
+await p.goto("http://localhost:3000/login"); await p.fill('input[name=identifier]', "owner@pulsefitness.demo"); await p.fill('input[name=password]', "GymPulse!Demo2026"); await p.click('button[type=submit]'); await p.waitForURL(/\/app/);
+await p.goto("http://localhost:3000/app/renew", { waitUntil: "load" });
+const btn = p.getByRole("button", { name: "Record payment" }).nth(2); await btn.waitFor();
+const row = (await btn.locator("xpath=ancestor::tr").innerText()).replace(/\s+/g, " ");
+await btn.click();
+const dlg = p.getByRole("dialog"); await dlg.locator('select[name=method]').selectOption("CASH");
+const t0 = Date.now();
+await dlg.locator('button[type=submit]').dblclick();
+const toast = await p.locator("[data-sonner-toast]").last().innerText({ timeout: 45000 }).catch(() => "(no toast in 45s)");
+await p.waitForTimeout(3000);
+console.log(`row: ${row}\nresult after ${Date.now() - t0}ms: ${toast.replace(/\s+/g, " ")}\nPOST statuses: ${reqs.join(",")}`);
+await p.goto("http://localhost:3000/app/renew", { waitUntil: "load" }); await p.waitForTimeout(1500);
+console.log("member still on due list:", (await p.locator("main").innerText()).includes(row.split(" ").slice(0, 2).join(" ")));
+await p.screenshot({ path: "out/localhost/record-payment-after.png" }); await b.close();

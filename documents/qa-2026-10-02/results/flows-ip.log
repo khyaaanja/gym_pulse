@@ -1,0 +1,36 @@
+[192.168.100.77] PASS login: wrong password shows error, stays on /login (3368ms) form text: Email or phone Password That email/phone and password don't match. Sign in  CON:Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[192.168.100.77] PASS login: unknown account message identical to wrong password (no enumeration) (205ms) {"error":{"code":"invalid_credentials","message":"That email/phone and password don't match."}}  CON:Failed to load resource: the server responded with a status of 401 (Unauthorized)|Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[192.168.100.77] PASS login: empty submit shows validation, no request crash (1725ms) Email or phone Password Sign in  
+[192.168.100.77] PASS forgot password: submit shows neutral confirmation (3097ms) GymPulse Reset your password We'll send a reset link to your email or phone. Email or phone If an account exists for that email or phone, we've sent a reset link. Send reset link Every morning: who to  
+[192.168.100.77] PASS reset password: bogus token rejected (3254ms) GymPulse Choose a new password You'll be signed out of other devices. New password At least 10 characters. Too small: expected string to have >=20 characters Save password Every morning: who to call,   CON:Failed to load resource: the server responded with a status of 400 (Bad Request)
+[192.168.100.77] PASS signup: weak password rejected (3170ms) fields=gymName:text,city:text,ownerName:text,email:email,phone:tel,password:password → Gym name City Your name Email Mobile Nepal mobile, e.g. 98XXXXXXXX Password At least 10 characters. Use at least 10 characters. Create gym  CON:Failed to load resource: the server responded with a status of 400 (Bad Request)
+[192.168.100.77] PASS signup: strong password creates gym and lands in app (337ms) landed /app/onboarding  
+[192.168.100.77] PASS signup: new owner sees onboarding/empty state without errors (1853ms) Set up QA IPx263r gymName 2 of 9 done. You can come back to this anytime from Settings. 1.Create your gym Done when you signed up. 2.Gym information Phone, address and city members will see. Set up 3.  
+[192.168.100.77] PASS signup: duplicate email rejected (15ms) 409 {"error":{"code":"conflict","message":"An account with this email already exists. Sign in instead."}}  CON:Failed to load resource: the server responded with a status of 409 (Conflict)
+[192.168.100.77] PASS owner: login via UI (874ms) http://192.168.100.77:3000/app  
+[192.168.100.77] FAIL owner: add member via dialog (30167ms) locator.click: Timeout 30000ms exceeded. EXC:crypto.randomUUID is not a function 
+[192.168.100.77] FAIL owner: XSS payload in member name is rendered as text (30002ms) locator.click: Timeout 30000ms exceeded.  
+[192.168.100.77] FAIL owner: member search finds the new member (10146ms) locator.waitFor: Timeout 10000ms exceeded. EXC:crypto.randomUUID is not a function 
+[192.168.100.77] FAIL owner: open member detail page (30001ms) locator.click: Timeout 30000ms exceeded.  
+[192.168.100.77] FAIL owner: edit member (Edit dialog) (30001ms) locator.click: Timeout 30000ms exceeded.  
+[192.168.100.77] FAIL owner: check in the new member at desk (15476ms) locator.click: Timeout 15000ms exceeded.  
+[192.168.100.77] FAIL owner: second check-in same day is handled (no duplicate) (15020ms) locator.click: Timeout 15000ms exceeded.  
+[192.168.100.77] FAIL owner: add plan (30372ms) locator.click: Timeout 30000ms exceeded. EXC:crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function 
+[192.168.100.77] PASS owner: plan with negative price rejected (22ms) 400 {"error":{"code":"validation","message":"Too small: expected number to be >=0","details":[{"path":"priceRupees","message":"Too small: expected number to be >=0"}]}}  CON:Failed to load resource: the server responded with a status of 400 (Bad Request)
+[192.168.100.77] FAIL owner: new announcement (30408ms) locator.click: Timeout 30000ms exceeded. EXC:crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function 
+[192.168.100.77] PASS owner: record payment from Renew (double-click submit → one payment) (871ms) no renewals due — skipped EXC:crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function 
+[192.168.100.77] FAIL owner: invite member to app → link host + copy button (clipboard API) (30451ms) locator.click: Timeout 30000ms exceeded. EXC:crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function|crypto.randomUUID is not a function 
+[192.168.100.77] PASS owner: kiosk page renders QR (1871ms) visual elems=25; GymPulse Pulse Fitness Kathmandu Search ⌘K Pulse Attendance Renew Marketplace Manage Overview Members Bookings Know Your Gym Analyze Records Reports A  
+[192.168.100.77] PASS owner: report export download (759ms) /api/gym/reports/members?range=30d → 200 text/csv; charset=utf-8 24025B  
+[192.168.100.77] PASS owner: global search (Ctrl+K) (2642ms) Results Member QA Member Lwkebc M-00230 · 9881454449  
+[192.168.100.77] PASS owner: sign out ends session (back to /app redirects to login) (2704ms) redirected to login; /api/auth/me 401  CON:Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[192.168.100.77] PASS trainer: login (835ms) ok  
+[192.168.100.77] PASS trainer: blocked from /app/settings (161ms) → /app/settings:   
+[192.168.100.77] PASS trainer: blocked from /app/reports (189ms) → /app/reports:   
+[192.168.100.77] PASS trainer: blocked from /app/renew (191ms) → /app/renew: Renew Memberships ending in the next 14 days, plus anyone still inside the 5-day grace period. Remin  
+[192.168.100.77] PASS trainer: blocked from /app/imports/new (148ms) → /app/imports/new:   
+[192.168.100.77] PASS member(phone): login (791ms) ok  
+[192.168.100.77] PASS member: home shows pass/streak (1892ms) Namaste, Aarav Pulse Fitness Kathmandu 0day streak Best 21 days S Saturday 2026-09-19: visited S Sunday 2026-09-20: visited M Monday 2026-09-21: visited T Tuesday 2026-09-22: visited W Wednesday 2026-  
+[192.168.100.77] PASS member: renew via test gateway (5343ms) after click → /pay/sandbox/GP-MUPX8DNL-D1KY3UGE | Test mode — no real money is charged. GymPulse Test Gateway · Pulse Fitness Kathmandu ₹1,500 Reference GP-MUPX8DNL-D1KY3UGE Approve payment Decline  
+[192.168.100.77] PASS member: cannot call staff API (10ms) 403  CON:Failed to load resource: the server responded with a status of 403 (Forbidden)
+[192.168.100.77] flows: 25/35 passed
