@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 const capture = (status = 200) => {
-  const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response("ok", { status }));
+  const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => new Response("ok", { status }));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 };

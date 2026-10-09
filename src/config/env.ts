@@ -17,7 +17,8 @@ const schema = z.object({
   // The test payment gateway lets members approve their own payments. Local development/demo only.
   ENABLE_TEST_GATEWAY: z.enum(["true", "false"]).default("false"),
   // How many reverse proxies sit in front of the app and append to X-Forwarded-For. The client IP is read that many
-  // entries from the right; anything further left is client-supplied and ignored. 0 = no proxy: the header is ignored.
+  // entries from the right; anything further left is client-supplied and ignored. 0 = no proxy: the header is ignored
+  // and every client shares one per-IP rate-limit bucket, so it is for local development only (production refuses it).
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   OCR_PROVIDER: z.enum(["tesseract", "none"]).default("none"),
   TESSERACT_LANG_PATH: z.string().optional(),

@@ -47,6 +47,25 @@ QA report `documents/qa-2026-10-02/QA-TEST-REPORT.md`: I re-checked every findin
 
 ## Phase 1: Code changes in the repo
 
+> **Status on 2026-10-09:** done on branch `chore/go-live`, except where marked.
+>
+> | Step | State |
+> |---|---|
+> | 1.1 commit + clean tree | ✅ scratch files moved to `~/gympulse-notes/` |
+> | 1.2 dependencies | ✅ next 16.4.0, sharp 0.35.5. The 4 Prisma-chain advisories remain (accepted; waiting for upstream) |
+> | 1.3 `.env.example` | ✅ comments on their own lines |
+> | 1.4 bootstrap | ✅ see below |
+> | 1.5 money transaction headroom | ✅ all 7 money transactions use `MONEY_TX` (15 s) |
+> | 1.6 Renew page | ✅ filtering happens in the query, the header shows the true total; the owner dashboard's expiring list uses the same rule |
+> | 1.7 proxy guard | ✅ production requires an explicit `TRUSTED_PROXY_HOPS`; `0` = no proxy (local development only) |
+> | 1.8 gym-local dates | ✅ receipt and order numbers, the receipt page, gym pages and CSV exports (both the date window and the printed dates). Super-admin pages still show the server's time zone |
+> | 1.9 e2e | ✅ headless, credentials from `E2E_OWNER_PASSWORD`, 4/4 passing locally |
+> | 1.10 runtime deps | ✅ `tsx`, `dotenv` in dependencies |
+> | 1.11 OCR data | ⏳ **your decision**: launch with `OCR_PROVIDER=none`, or bundle `eng.traineddata` |
+> | 1.12 key rotation script | ⏳ not started (🟡, before scaling) |
+> | 1.13 error webhook | ✅ sends `text`/`content`; a rejected webhook is logged |
+> | 1.14 push | ⏳ needs the GitHub remote (Phase 2.1) |
+
 Do all of Phase 1 on your laptop. After each step run:
 ```bash
 npm run typecheck && npm run lint && npm test
@@ -161,52 +180,25 @@ out on purpose because it is demo-only.
 
 **Done when:** `git add .env.example && git commit -m "Add .env.example"`, and `git show --stat HEAD` shows it.
 
-### 1.4 🔴 Create a production bootstrap script (first admin + platform data)
+### 1.4 🔴 Production bootstrap script (first admin + platform data) ✅ done
 
-**Why: this is the biggest hidden blocker.** On a fresh production database:
-- `npm run db:seed` **refuses to run** (`prisma/seed.ts:20`, by design, because it creates demo gyms and demo passwords).
-- The only way to create a platform admin is `POST /api/admin/admins`, which **requires an admin who is already
-  logged in**. So production starts with no super-admin and no way to create one.
-- The seed's `platform()` function (lines 53–175) is also what creates the **SaaS plans** (Starter / Growth / Pro),
-  feature flags, prediction config, platform settings, marketplace categories, commission rules, and legal content.
-  Gym signup and pricing need these.
+**Why it was needed:** on a fresh production database the demo seed refuses to run, and the only way to create a
+platform admin was an endpoint that needs an admin who is already signed in. The SaaS plans, notification templates,
+automation rules and legal content were also created only by the demo seed.
 
-**What to do:** split the seed into two parts.
-
-1. Create `prisma/bootstrap.ts` that is **safe for production** and **idempotent** (running it twice changes nothing):
-   - Move everything from `platform()` **except** the three demo admins (`*@gympulse.local`) and the
-     `sandbox` payment provider row into an exported `platformReferenceData()` function (e.g. in
-     `prisma/reference-data.ts`). That includes the **notification templates and automation rules**
-     (`seed.ts:103–124`), which renewal reminders depend on.
-   - **Make every write "create if missing, never overwrite".** `seed.ts:60` (`saasPlan.upsert(... update: p)`) and
-     `:74` (`featureFlag.upsert(... update: { enabled })`) overwrite on every run, so re-running bootstrap would
-     silently undo prices and flags the super-admin edited. Use `update: {}` in the bootstrap version.
-   - Change the `platform.supportEmail` default from `support@gympulse.example` to your real address (or read it
-     from an env var such as `BOOTSTRAP_SUPPORT_EMAIL`).
-   - Create the first super-admin from environment variables, **only if no SUPER_ADMIN exists yet**:
-     ```ts
-     // prisma/bootstrap.ts (sketch)
-     const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
-     const temp = process.env.BOOTSTRAP_ADMIN_PASSWORD;          // one-time, ≥ 16 chars
-     if (!email || !temp) throw new Error("Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD");
-     if (!(await prisma.platformAdmin.count({ where: { role: "SUPER_ADMIN" } }))) {
-       await prisma.platformAdmin.create({ data: {
-         email: email.toLowerCase(), name: "Owner", role: "SUPER_ADMIN",
-         passwordHash: await hashPassword(temp),
-         mustResetPassword: true, mfaRequired: true,               // same flags as /api/admin/admins
-       } });
-     }
-     ```
-2. Make `prisma/seed.ts` call `platformReferenceData()` and keep creating its demo admins and demo gyms as before,
-   so local development is unchanged.
-3. Add `"db:bootstrap": "tsx --tsconfig tsconfig.json prisma/bootstrap.ts"` to `package.json`.
-4. Add a test (e.g. `tests/bootstrap.test.ts`) that runs bootstrap twice against the test DB and asserts:
-   one SUPER_ADMIN, three SaaS plans, the global notification templates and automation rules exist, **zero** gyms,
-   **zero** `*.demo` users, and no `sandbox` provider row. Also change a plan's price between the two runs, and
-   assert the second run did **not** reset it.
-
-**Done when:** that test passes, and on a fresh local DB `npm run db:migrate && npm run db:bootstrap` lets you log
-in at `/super-admin`, where you're forced to reset the password and enrol MFA.
+**What exists now:**
+- `prisma/reference-data.ts`: the platform reference data, shared by the demo seed and the bootstrap. It has no demo
+  admins and no test gateway.
+- `npm run db:bootstrap` (`prisma/bootstrap.ts`) takes `BOOTSTRAP_SUPPORT_EMAIL`, `BOOTSTRAP_ADMIN_EMAIL` and
+  `BOOTSTRAP_ADMIN_PASSWORD`, and refuses placeholder addresses and passwords under 16 characters.
+  - The first run writes the reference data **once** and creates the first SUPER_ADMIN, who must reset the password
+    and enrol MFA at first sign-in.
+  - Later runs need none of the variables and change nothing. They never re-create a row a super-admin deleted, and
+    never overwrite one they edited.
+  - It runs under an advisory lock, so two runs at the same time still produce exactly one admin.
+- The demo seed (`npm run db:seed`) now runs **only** with `APP_ENV=development` or `test`, so staging can't get
+  demo admins either.
+- Tests: `tests/bootstrap.test.ts` (fresh schema built from the migrations; race, idempotency, deletions, validation).
 
 ### 1.5 🔴 Payment transactions: give them headroom (QA #2)
 
@@ -576,9 +568,10 @@ OCR_PROVIDER=none
 MAX_UPLOAD_MB=10
 ERROR_WEBHOOK_URL=https://<endpoint that accepts any JSON, or Slack/Discord after step 1.13>
 LOG_LEVEL=info
-# Only for the first bootstrap run. Delete these two lines afterwards (step 5.4):
+# Only for the first bootstrap run. Delete these three lines afterwards (step 5.4):
+BOOTSTRAP_SUPPORT_EMAIL=support@your-domain
 BOOTSTRAP_ADMIN_EMAIL=you@your-domain
-BOOTSTRAP_ADMIN_PASSWORD=<long random one-time password>
+BOOTSTRAP_ADMIN_PASSWORD=<long random one-time password, 16+ characters>
 ```
 
 ### 4.4 🔴 Generate and safeguard the keys
@@ -617,8 +610,8 @@ cd /srv/gympulse
 docker compose run --rm web npm run db:migrate
 ```
 Expected: "All migrations have been successfully applied". If `pg_trgm` errors, enable it in the provider's dashboard.
-**Never run `npm run db:seed` here.** It refuses in production anyway, but staging with `APP_ENV=staging` would
-let it through and fill staging with demo accounts.
+**Never run `npm run db:seed` here.** It refuses anything but `APP_ENV=development`/`test`, because the demo admins'
+password is published in the repo.
 
 ### 5.3 Bootstrap platform data and the first admin (needs step 1.4)
 
@@ -629,7 +622,7 @@ docker compose run --rm web npm run db:bootstrap
 ### 5.4 Start everything and remove the bootstrap password
 
 ```bash
-sed -i '/^BOOTSTRAP_ADMIN_/d' .env.production   # remove the one-time password BEFORE the long-running containers start
+sed -i '/^BOOTSTRAP_/d' .env.production   # remove the one-time password BEFORE the long-running containers start
 grep -c BOOTSTRAP_ .env.production              # must print 0
 docker compose up -d
 docker compose ps                       # web "healthy"; worker and caddy "running" (worker has no healthcheck)
@@ -774,4 +767,4 @@ the rotation script from step 1.12. That's why it's on the list.
   `docker build` for HSTS. This is how Next.js has historically worked, but **check it with the `curl -I` in step 5.5**,
   don't assume it.
 - eSewa, Khalti, Sparrow and Aakash adapters have **never run against live credentials**.
-- The code fixes in Phase 1 (1.4–1.8, 1.12, 1.13) are **described, not written**. Each needs its test to pass before it counts as done.
+- Phase 1 code fixes are written and tested (see the status table at the top of Phase 1), except 1.11 (a decision) and 1.12 (not started).
