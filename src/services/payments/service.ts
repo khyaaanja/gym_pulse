@@ -6,7 +6,7 @@ import { securityEvent, audit, type AuditActor } from "@/lib/audit";
 import { AppError, badRequest, notFound } from "@/lib/errors";
 import { formatMoney } from "@/lib/money";
 import { log } from "@/lib/logger";
-import { today as todayIn } from "@/lib/time";
+import { localDate, today as todayIn } from "@/lib/time";
 import type { Gym, Member, Payment, PaymentMethod, ProviderEnvironment } from "@/generated/prisma/client";
 import { renewMembership } from "../memberships";
 import { onMemberRenewed } from "../recovery";
@@ -16,6 +16,7 @@ import { enqueue } from "../jobs";
 import { PAYMENT_ADAPTERS, VerificationError, testGatewayEnabled, type CheckoutInstruction, type VerifiedEvent } from "./providers";
 import { applyCoupon, recordCouponRedemption, releaseCouponReservation, reserveCoupon } from "../coupons";
 import { releaseOrderInventory } from "../marketplace";
+import { MONEY_TX } from "@/lib/tx";
 
 export const newReference = () => `GP-${Date.now().toString(36).toUpperCase()}-${randomToken(6).replace(/[-_]/g, "X").toUpperCase()}`;
 
@@ -84,7 +85,7 @@ export async function startMembershipCheckout(
     });
     if (discount) await reserveCoupon(tx, discount.couponId, member.id, { paymentId: p.id });
     return p;
-  });
+  }, MONEY_TX);
   const instruction = await initiate(provider, payment, `${gym.name} — ${plan.name}`, member);
   return { payment, instruction };
 }
@@ -242,7 +243,7 @@ export async function confirmPayment(paymentId: string, providerRef?: string, ac
     }
     const fulfilment = await fulfil(tx, paid);
     return { payment: paid, changed: true as const, fulfilment };
-  });
+  }, MONEY_TX);
 
   if (outcome.changed) {
     const p = outcome.payment;
@@ -276,7 +277,7 @@ export async function failPayment(paymentId: string, reason: string) {
     if (p.status !== "PENDING") return { payment: p, changed: false };
     const failed = await tx.payment.update({ where: { id: p.id }, data: { status: "FAILED", failureReason: reason } });
     return { payment: failed, changed: true };
-  });
+  }, MONEY_TX);
   if (res.changed) {
     const p = res.payment;
     if (p.purpose === "MEMBERSHIP") await releaseCouponReservation(prisma, { paymentId: p.id });
@@ -291,14 +292,15 @@ export async function failPayment(paymentId: string, reason: string) {
 
 // ─────────────────────────────── Fulfilment ───────────────────────────────
 
-function receiptNumber(p: Payment) {
-  const d = (p.paidAt ?? new Date()).toISOString().slice(2, 10).replace(/-/g, "");
+/** R<yymmdd>-<ref>, dated in the gym's time zone so it matches the date printed on the receipt. */
+export function receiptNumber(p: Pick<Payment, "paidAt" | "reference">, tz: string) {
+  const d = localDate(p.paidAt ?? new Date(), tz).slice(2).replace(/-/g, "");
   return `R${d}-${p.reference.slice(-6)}`;
 }
 
 async function fulfil(tx: Tx, p: Payment) {
   const gym = await tx.gym.findUniqueOrThrow({ where: { id: p.gymId } });
-  const number = receiptNumber(p);
+  const number = receiptNumber(p, gym.timezone);
   if (p.purpose === "MEMBERSHIP") {
     if (!p.memberId || !p.planId) throw new Error("Membership payment missing member or plan");
     const plan = await tx.membershipPlan.findFirstOrThrow({ where: { id: p.planId, gymId: p.gymId } });
@@ -454,7 +456,7 @@ export async function recordManualMembershipPayment(
       },
     });
     return { payment, replay: false };
-  });
+  }, MONEY_TX);
   // A replayed submit returns the original payment; confirming again is a no-op once it has succeeded.
   if (created.replay) return (await confirmPayment(created.payment.id)).payment;
   const payment = created.payment;

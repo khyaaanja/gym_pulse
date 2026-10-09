@@ -1,6 +1,7 @@
 import { prisma } from "@/db/client";
 import { audit, SYSTEM_ACTOR, type AuditActor } from "@/lib/audit";
 import { notFound, badRequest } from "@/lib/errors";
+import { MONEY_TX } from "@/lib/tx";
 
 const periodMs = (p: "MONTHLY" | "YEARLY") => (p === "YEARLY" ? 365 : 30) * 86_400_000;
 
@@ -60,7 +61,7 @@ export async function markInvoicePaid(invoiceId: string, paymentRef: string, act
     const stillDue = await tx.subscriptionInvoice.count({ where: { subscriptionId: inv.subscriptionId, status: "DUE", dueAt: { lt: new Date() } } });
     if (!stillDue) await tx.subscription.updateMany({ where: { id: inv.subscriptionId, status: "PAST_DUE" }, data: { status: "ACTIVE" } });
     return p;
-  });
+  }, MONEY_TX);
   await audit({ actor, action: "subscription.invoice_paid", entityType: "SubscriptionInvoice", entityId: invoiceId, gymId: inv.gymId, after: { paymentRef } });
   return paid;
 }

@@ -192,3 +192,39 @@ describe("the test gateway is opt-in", () => {
     }
   });
 });
+
+describe("money transactions have headroom when the database is slow", () => {
+  it("confirming a payment survives a 6.5 s wait on a lock inside its transaction (Prisma's default limit is 5 s)", async () => {
+    const { gym, plan } = await makeGym();
+    const member = await makeMember(gym.id);
+    const payment = await prisma.payment.create({ data: { gymId: gym.id, memberId: member.id, purpose: "MEMBERSHIP", method: "CASH", provider: "manual", reference: `GP-T-${Date.now()}-${Math.random()}`, amountPaisa: plan.pricePaisa, planId: plan.id, status: "PENDING" } });
+
+    // Another connection holds the member's row lock. confirmPayment takes the payment lock first, then waits on
+    // the member lock, so the wait is spent inside its transaction, as it was when the desk hit a slow database.
+    const { schema } = (await import("./setup/env")).loadTestEnv();
+    const blocker = new (await import("pg")).default.Client({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema},public` });
+    await blocker.connect();
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(`SELECT "id" FROM "Member" WHERE "id" = $1 FOR UPDATE`, [member.id]);
+      const release = new Promise((r) => setTimeout(r, 6_500)).then(() => blocker.query("COMMIT"));
+      const started = Date.now();
+      await svc.confirmPayment(payment.id, undefined, deskActor);
+      await release;
+      expect(Date.now() - started).toBeGreaterThan(6_000);
+    } finally {
+      await blocker.end();
+    }
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe("SUCCEEDED");
+    expect(await prisma.membership.count({ where: { memberId: member.id } })).toBe(1);
+  }, 30_000);
+});
+
+describe("receipt numbers", () => {
+  it("are dated in the gym's time zone, matching the date printed on the receipt", () => {
+    // 20:00 UTC on 1 Oct is 01:45 on 2 Oct in Kathmandu.
+    const p = { paidAt: new Date("2026-10-01T20:00:00Z"), reference: "GP-XYZ-ABC123" };
+    expect(svc.receiptNumber(p, "Asia/Kathmandu")).toBe("R261002-ABC123");
+    expect(svc.receiptNumber(p, "UTC")).toBe("R261001-ABC123");
+  });
+});

@@ -6,6 +6,8 @@ import { log } from "@/lib/logger";
 import { randomToken } from "@/lib/crypto";
 import type { Gym, Member } from "@/generated/prisma/client";
 import { applyCoupon, releaseCouponReservation, reserveCoupon } from "./coupons";
+import { MONEY_TX } from "@/lib/tx";
+import { localDate } from "@/lib/time";
 
 export type Split = { platformBps: number; gymBps: number; vendorBps: number; ruleId: string | null };
 
@@ -131,7 +133,7 @@ export async function placeOrder(gym: Gym, member: Member, items: { productId: s
         if (n === 0) throw conflict(l.p.isBundle ? `${l.p.name} is out of stock (${m.name}).` : `${l.p.name} is out of stock.`);
       }
     }
-    const number = `ORD-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${randomToken(4).replace(/[-_]/g, "X").toUpperCase()}`;
+    const number = `ORD-${localDate(new Date(), gym.timezone).slice(2).replace(/-/g, "")}-${randomToken(4).replace(/[-_]/g, "X").toUpperCase()}`;
     const order = await tx.marketplaceOrder.create({
       data: {
         gymId: gym.id,
@@ -163,7 +165,7 @@ export async function placeOrder(gym: Gym, member: Member, items: { productId: s
     });
     if (discount) await reserveCoupon(tx, discount.couponId, member.id, { orderId: order.id });
     return order;
-  });
+  }, MONEY_TX);
 }
 
 export async function releaseOrderInventory(gymId: string, orderId: string, reason: string) {
@@ -179,7 +181,7 @@ export async function releaseOrderInventory(gymId: string, orderId: string, reas
     await tx.marketplaceOrder.update({ where: { id: order.id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
     await releaseCouponReservation(tx, { orderId: order.id });
     await tx.auditLog.create({ data: { actorType: "SYSTEM", action: "order.cancelled", entityType: "MarketplaceOrder", entityId: order.id, gymId, metadata: { reason } } });
-  });
+  }, MONEY_TX);
 }
 
 /** Unpaid orders older than 30 minutes release their stock. */
