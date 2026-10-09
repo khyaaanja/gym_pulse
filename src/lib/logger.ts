@@ -26,17 +26,27 @@ function write(level: Level, msg: string, meta?: Record<string, unknown>) {
   if (level === "error") void reportError(msg, meta);
 }
 
-/** Error-monitoring hook: POSTs to ERROR_WEBHOOK_URL (Sentry relay, Slack, etc.) when configured. */
-async function reportError(msg: string, meta?: Record<string, unknown>) {
+/**
+ * Error-monitoring hook: POSTs to ERROR_WEBHOOK_URL when configured. The body works with Slack (`text`) and Discord
+ * (`content`) incoming webhooks, which reject anything without those fields, and keeps the structured fields
+ * (`msg`, `meta`, `env`, `at`) for relays that parse JSON.
+ */
+export async function reportError(msg: string, meta?: Record<string, unknown>) {
   const url = process.env.ERROR_WEBHOOK_URL;
   if (!url) return;
+  const env = process.env.APP_ENV;
+  const safeMeta = redact(meta);
+  const requestId = typeof meta?.requestId === "string" ? ` (request ${meta.requestId})` : "";
+  const summary = `[GymPulse ${env ?? "unknown"}] ${msg}${requestId}`.slice(0, 1900); // Discord caps content at 2000
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ msg, meta: redact(meta), env: process.env.APP_ENV, at: new Date().toISOString() }),
+      body: JSON.stringify({ text: summary, content: summary, msg, meta: safeMeta, env, at: new Date().toISOString() }),
       signal: AbortSignal.timeout(3000),
     });
+    // console, not log.error: a failing webhook must not report itself in a loop.
+    if (!res.ok) console.warn(JSON.stringify({ t: new Date().toISOString(), level: "warn", msg: "error_webhook.rejected", status: res.status }));
   } catch {
     // monitoring must never break the request path
   }
