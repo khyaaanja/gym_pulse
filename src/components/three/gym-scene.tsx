@@ -294,7 +294,6 @@ const PX_BUDGET = 2.1e6;
 const FRAME_MS = 12;
 const MP4 = 'video/mp4; codecs="avc1.640028"';
 const WEBM = 'video/webm; codecs="vp9"';
-/** Play or pause the stage's opening loop. A loop with no source (reduced motion) just rejects: nothing to do. */
 const loopOf = (el: HTMLElement) => el.querySelector<HTMLVideoElement>("video.gym-loop");
 /** Whether the stage still wants its opening loop playing: on the page, not under the live film or a chapter still,
  *  and motion not turned off meanwhile (the <source> was picked at load, so the loop would still play). */
@@ -332,6 +331,7 @@ function retryOnGesture(el: HTMLElement) {
   };
   GESTURES.forEach((g) => window.addEventListener(g, retry, { capture: true, passive: true, signal: ac.signal }));
 }
+/** Play or pause the stage's opening loop. A loop with no source (reduced motion) just rejects: nothing to do. */
 const playLoop = (el: HTMLElement) => {
   const v = loopOf(el);
   if (!v?.paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
