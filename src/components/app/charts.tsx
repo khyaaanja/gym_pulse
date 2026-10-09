@@ -88,9 +88,10 @@ function textWidth(text: string, font: string) {
 /**
  * Which axis labels to draw, and where: each label is pulled inside the chart's edges, the last one is always kept
  * (the newest day matters most), and the rest go left to right wherever they clear the previous label by `gap` px.
- * Labels that would collide are dropped instead of overlapping.
+ * Labels that would collide are dropped instead of overlapping. A label that would have to move more than `maxShift`
+ * px to fit (a long name under the last of many narrow bars would end up under its neighbour) is dropped instead.
  */
-function thin(labels: string[], at: (i: number) => number, w: number, font: string, gap: number) {
+function thin(labels: string[], at: (i: number) => number, w: number, font: string, gap: number, maxShift = Infinity) {
   const place = (i: number) => {
     const half = textWidth(labels[i]!, font) / 2;
     const c = Math.min(w - half, Math.max(half, at(i)));
@@ -99,16 +100,18 @@ function thin(labels: string[], at: (i: number) => number, w: number, font: stri
   const show = new Map<number, number>();
   if (labels.length === 0) return show;
   const last = labels.length - 1;
-  const [lastL, , lastC] = place(last);
+  const [lastL0, , lastC0] = place(last);
+  const keepLast = Math.abs(lastC0 - at(last)) <= maxShift;
+  const [lastL, lastC] = keepLast ? [lastL0, lastC0] : [w, 0];
   let edge = -Infinity;
   for (let i = 0; i < last; i++) {
     const [l, r, c] = place(i);
-    if (l >= edge + gap && r + gap <= lastL) {
+    if (l >= edge + gap && r + gap <= lastL && Math.abs(c - at(i)) <= maxShift) {
       show.set(i, c);
       edge = r;
     }
   }
-  show.set(last, lastC);
+  if (keepLast) show.set(last, lastC);
   return show;
 }
 
@@ -271,7 +274,7 @@ export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: str
   const barW = Math.min(48, Math.max(1, band - gap * 2));
   const y = (v: number) => PAD.top + plotH - (v / top) * plotH;
   const cx = (i: number) => left + band * i + band / 2;
-  const shown = thin(data.map((d) => d.label), cx, w, font, 8);
+  const shown = thin(data.map((d) => d.label), cx, w, font, 8, band / 2);
 
   const pick = (e: PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
