@@ -12,6 +12,8 @@ import { OWNER_EMAIL, OWNER_PASSWORD } from './credentials';
 const BASE_URL = 'http://localhost:3000';
 
 test('Comprehensive owner dashboard - check all buttons and features', async ({ page }) => {
+  // Clicks through ~10 pages one after another: ~25 s on its own, more when the suite runs in parallel.
+  test.setTimeout(60_000);
   // =====================================================
   // STEP 1: LOGIN
   // =====================================================
