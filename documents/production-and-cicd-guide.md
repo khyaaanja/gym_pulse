@@ -410,6 +410,11 @@ test-results
 
 ### Step 5: `.github/workflows/deploy.yml` (Continuous Delivery)
 
+> **Superseded (2026-10-09):** the real files are `.github/workflows/ci.yml`, `.github/workflows/deploy.yml` and
+> `scripts/deploy.sh` in the repo. They differ from the sketches below: images are deployed by digest
+> (`image: ${IMAGE_REF:?}` in compose), settings are named `STAGING_*` / `PRODUCTION_*`, and production deploys
+> only by a manual run. Read the files, not this section.
+
 Example target: one VPS running Docker Compose behind Caddy. The robot builds the image, pushes it to GitHub's
 container registry (GHCR), then SSHes into the server as a restricted `deploy` user and switches to the new tag.
 
@@ -579,6 +584,10 @@ if Next.js writes elsewhere at runtime. Test it on staging first.
   console** before saving it as `DEPLOY_KNOWN_HOSTS`.
 
 ### Step 6: Where every secret lives
+
+> **Superseded (2026-10-09):** the deploy settings are now `STAGING_DEPLOY_HOST`, `STAGING_DEPLOY_USER`,
+> `STAGING_APP_URL` (variables) and `STAGING_DEPLOY_SSH_KEY`, `STAGING_DEPLOY_KNOWN_HOSTS` (secrets), and the same with
+> `PRODUCTION_`. On GitHub Free (private repo) they live at repository level; see the top of `.github/workflows/deploy.yml`.
 
 | Secret | Lives in | Never in |
 |---|---|---|

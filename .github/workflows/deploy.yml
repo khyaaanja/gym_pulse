@@ -17,6 +17,12 @@ name: deploy
 # - Production is never automatic. On GitHub Pro/Team, also add yourself as a required reviewer on the `production`
 #   environment and restrict it to main.
 # - One deploy per environment at a time, never cancelled half-way. Rollback = a manual run with an older SHA+digest.
+#
+# Settings (Settings ► Secrets and variables ► Actions), per environment, with prefix STAGING_ or PRODUCTION_:
+#   variables: <P>DEPLOY_ENABLED=true, <P>DEPLOY_HOST, <P>DEPLOY_USER, <P>APP_URL (https://...)
+#   secrets:   <P>DEPLOY_SSH_KEY (private key, ed25519, one per environment),
+#              <P>DEPLOY_KNOWN_HOSTS (`ssh-keyscan` output, fingerprint checked against the server console)
+# Server: /srv/gympulse/docker-compose.yml with `image: ${IMAGE_REF:?}` for web and worker (see scripts/deploy.sh).
 on:
   workflow_run:
     workflows: [ci]
@@ -158,6 +164,7 @@ jobs:
           APP_URL: ${{ vars.STAGING_APP_URL }}
           DEPLOY_SSH_KEY: ${{ secrets.STAGING_DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.STAGING_DEPLOY_KNOWN_HOSTS }}
+          OTHER_KNOWN_HOSTS: ${{ secrets.PRODUCTION_DEPLOY_KNOWN_HOSTS }}
         run: scripts/deploy.sh
 
   # Manual deploy of an already-published image: production releases, staging re-deploys, and rollbacks.
@@ -172,7 +179,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
-      url: ${{ inputs.environment == 'production' && vars.PRODUCTION_APP_URL || vars.STAGING_APP_URL }}
+      url: ${{ vars[format('{0}_APP_URL', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
     concurrency:
       group: deploy-${{ inputs.environment }}
       cancel-in-progress: false
@@ -203,28 +210,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Only the chosen environment's key enters this step; the other environment's host key is used just to refuse
+      # deploying when both settings point at the same machine.
       - name: Deploy
         env:
-          TARGET: ${{ inputs.environment }}
           TAG: ${{ inputs.sha }}
           IMAGE_REF: ${{ steps.image.outputs.ref }}
-          STAGING_HOST: ${{ vars.STAGING_DEPLOY_HOST }}
-          PRODUCTION_HOST: ${{ vars.PRODUCTION_DEPLOY_HOST }}
-          STAGING_USER: ${{ vars.STAGING_DEPLOY_USER }}
-          PRODUCTION_USER: ${{ vars.PRODUCTION_DEPLOY_USER }}
-          STAGING_URL: ${{ vars.STAGING_APP_URL }}
-          PRODUCTION_URL: ${{ vars.PRODUCTION_APP_URL }}
-          STAGING_KEY: ${{ secrets.STAGING_DEPLOY_SSH_KEY }}
-          PRODUCTION_KEY: ${{ secrets.PRODUCTION_DEPLOY_SSH_KEY }}
-          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_DEPLOY_KNOWN_HOSTS }}
-          PRODUCTION_KNOWN_HOSTS: ${{ secrets.PRODUCTION_DEPLOY_KNOWN_HOSTS }}
-        run: |
-          if [ "$TARGET" = production ]; then
-            export DEPLOY_HOST="$PRODUCTION_HOST" OTHER_HOST="$STAGING_HOST" DEPLOY_USER="$PRODUCTION_USER" \
-                   APP_URL="$PRODUCTION_URL" DEPLOY_SSH_KEY="$PRODUCTION_KEY" DEPLOY_KNOWN_HOSTS="$PRODUCTION_KNOWN_HOSTS"
-          else
-            export DEPLOY_HOST="$STAGING_HOST" OTHER_HOST="$PRODUCTION_HOST" DEPLOY_USER="$STAGING_USER" \
-                   APP_URL="$STAGING_URL" DEPLOY_SSH_KEY="$STAGING_KEY" DEPLOY_KNOWN_HOSTS="$STAGING_KNOWN_HOSTS"
-          fi
-          unset STAGING_KEY PRODUCTION_KEY STAGING_KNOWN_HOSTS PRODUCTION_KNOWN_HOSTS
-          scripts/deploy.sh
+          DEPLOY_HOST: ${{ vars[format('{0}_DEPLOY_HOST', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
+          DEPLOY_USER: ${{ vars[format('{0}_DEPLOY_USER', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
+          APP_URL: ${{ vars[format('{0}_APP_URL', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
+          DEPLOY_SSH_KEY: ${{ secrets[format('{0}_DEPLOY_SSH_KEY', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets[format('{0}_DEPLOY_KNOWN_HOSTS', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
+          OTHER_HOST: ${{ vars[format('{0}_DEPLOY_HOST', inputs.environment == 'production' && 'STAGING' || 'PRODUCTION')] }}
+          OTHER_KNOWN_HOSTS: ${{ secrets[format('{0}_DEPLOY_KNOWN_HOSTS', inputs.environment == 'production' && 'STAGING' || 'PRODUCTION')] }}
+        run: scripts/deploy.sh

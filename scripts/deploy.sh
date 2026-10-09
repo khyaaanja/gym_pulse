@@ -3,8 +3,10 @@
 # locally.
 #
 # Server side (see documents/GO-LIVE-RUNBOOK.md, Phases 3-4): /srv/gympulse/docker-compose.yml whose web and worker
-# services use `image: ${IMAGE_REF}` (the worker with `healthcheck: {disable: true}`), an .env.production next to it,
+# services use `image: ${IMAGE_REF:?}` (the worker with `healthcheck: {disable: true}`), an .env.production next to it,
 # and a deploy user that can run docker there and has done `docker login ghcr.io` with a read:packages token.
+# This script writes IMAGE_REF into /srv/gympulse/.env (compose reads it automatically), so a later hand-run
+# `docker compose up -d` keeps the deployed image. It refuses to finish unless the containers run exactly IMAGE_REF.
 #
 # Order matters: migrate first in a one-off container. If the migration fails, the running app is left untouched.
 set -euo pipefail
@@ -21,6 +23,12 @@ DEPLOY_USER="${DEPLOY_USER:-deploy}"
 # Staging and production must be different machines; a copy-paste mistake here would deploy untested code live.
 if [ -n "${OTHER_HOST:-}" ] && [ "${OTHER_HOST,,}" = "${DEPLOY_HOST,,}" ]; then
   echo "staging and production point at the same host ($DEPLOY_HOST): refusing" >&2; exit 1
+fi
+# Same machine under two names (IP vs hostname) shows up as the same host key in both known_hosts values.
+if [ -n "${OTHER_KNOWN_HOSTS:-}" ]; then
+  keys() { awk 'NF >= 3 && $1 !~ /^#/ { print $(NF-1), $NF }' | sort -u; }
+  shared=$(comm -12 <(printf '%s\n' "$DEPLOY_KNOWN_HOSTS" | keys) <(printf '%s\n' "$OTHER_KNOWN_HOSTS" | keys))
+  [ -z "$shared" ] || { echo "staging and production known_hosts share a host key (same machine?): refusing" >&2; exit 1; }
 fi
 
 ssh_dir="$(mktemp -d)"
@@ -41,11 +49,19 @@ cd /srv/gympulse
 export TAG IMAGE_REF
 docker compose pull web worker
 docker compose run --rm --no-deps web npm run db:migrate
-docker compose up -d --remove-orphans web worker
-# Prove the containers now running are the requested build, not an old one left behind.
+# Record the image for compose (atomically) only once the migration has succeeded.
+printf 'IMAGE_REF=%s\n' "$IMAGE_REF" > .env.tmp && mv .env.tmp .env
+# --wait: web must turn healthy and the worker must be running (not restarting) before this returns.
+docker compose up -d --remove-orphans --wait --wait-timeout 180 web worker
+sleep 10
+# Prove the containers now running are exactly the requested image, and stable.
 for svc in web worker; do
-  rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$(docker compose ps -q "$svc")")
-  [ "$rev" = "$TAG" ] || { echo "$svc is running revision '$rev', expected $TAG" >&2; exit 1; }
+  id=$(docker compose ps -q "$svc")
+  [ -n "$id" ] || { echo "$svc is not running" >&2; exit 1; }
+  image=$(docker inspect -f '{{.Config.Image}}' "$id")
+  [ "$image" = "$IMAGE_REF" ] || { echo "$svc runs '$image', expected $IMAGE_REF (compose must use image: \${IMAGE_REF:?})" >&2; exit 1; }
+  state=$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$id")
+  [ "$state" = "running 0" ] || { echo "$svc is not stable: $state" >&2; exit 1; }
 done
 printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TAG" "$IMAGE_REF" >> deploy-history.log
 REMOTE

@@ -319,6 +319,10 @@ Open a PR, let CI run (Phase 2), and merge to `main`.
 
 ## Phase 2: GitHub and CI
 
+> **Status on 2026-10-09:** CI/CD files are committed (`.github/`, `Dockerfile`, `.dockerignore`, `scripts/deploy.sh`,
+> `scripts/ci/audit-gate.mjs`). They differ from the guide's sketches; the files are the source of truth. Settings the
+> deploy needs are listed at the top of `.github/workflows/deploy.yml`.
+
 ### 2.1 🔴 Create the private repository and push
 
 ```bash
@@ -668,13 +672,13 @@ Repeat 5.1–5.5 on the production server with production values and **live** pa
 
 ## Phase 6: Automate deploys (after you're live)
 
-Once the manual deploy works, replace 5.1 with the pipeline in **guide Part 3, Step 5** (`deploy.yml` +
-`scripts/deploy.sh`): CI builds the image once, pushes to GHCR, deploys to staging, waits for your approval, and
-deploys the *same* image to production. Adjust:
-- the compose `image:` lines to `ghcr.io/<you>/gympulse:${TAG}`
-- the `docker build` step to pass `--build-arg APP_ENV=production` (`build-args:` in `docker/build-push-action`)
-
-Then pin actions to SHAs (guide Step 8) and rehearse a rollback on staging once.
+The pipeline is already in the repo: `.github/workflows/deploy.yml` + `scripts/deploy.sh` (actions are SHA-pinned).
+It is inert until you switch it on; the settings it needs are listed at the top of `deploy.yml`. Once the manual deploy works:
+- change **both** compose `image:` lines (web and worker) to `image: ${IMAGE_REF:?}`. The deploy writes
+  `IMAGE_REF=ghcr.io/khyaaanja/gym@sha256:…` into `/srv/gympulse/.env`, and refuses to finish unless both containers
+  run exactly that digest, so a tag-based compose file fails the deploy instead of silently pulling by tag.
+- on the server, as the deploy user: `docker login ghcr.io` with a token that has only `read:packages`.
+- rehearse a rollback on staging once (Actions ► deploy ► Run workflow with an older sha + digest).
 
 ---
 
@@ -694,7 +698,8 @@ docker compose run --rm web npm run db:migrate     # migrate first
 docker compose up -d                                # then roll web + worker
 curl -fsS https://app.your-domain/api/health
 ```
-Rollback: `TAG=<previous-sha> docker compose up -d`. Keep the last 3 images. Migrations must be backward
+Rollback: `TAG=<previous-sha> docker compose up -d` (after Phase 6: rerun the deploy workflow with the previous
+sha + digest). Keep the last 3 images. Migrations must be backward
 compatible (guide Part 4), because the database doesn't roll back.
 
 ### 7.3 🟠 If a secret leaks
