@@ -48,43 +48,67 @@ function monotone(pts: [number, number][]): string {
   return d;
 }
 
-/** Tracks the box's width; 0 until measured (on the server and before the first layout). */
-function useWidth() {
+/**
+ * The box's width (0 until measured, on the server and before the first layout) and the font its labels are drawn
+ * in, re-read once web fonts finish loading so labels are spaced for the font actually on screen.
+ */
+function useBox() {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
+  const [font, setFont] = useState("");
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const read = () => setFont(`${FONT}px ${getComputedStyle(el).fontFamily}|${document.fonts?.status ?? ""}`);
+    read();
+    let live = true;
+    void document.fonts?.ready.then(() => { if (live) read(); });
     const ro = new ResizeObserver(([e]) => setW(Math.floor(e!.contentRect.width)));
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { live = false; ro.disconnect(); };
   }, []);
-  return [ref, w] as const;
+  return [ref, w, font] as const;
 }
 
 let ruler: CanvasRenderingContext2D | null = null;
-/** Rendered width of a label in the chart's font (client only: charts draw nothing until measured). */
-function textWidth(text: string, el: Element) {
-  ruler ??= document.createElement("canvas").getContext("2d");
-  if (!ruler) return text.length * 6.6;
-  ruler.font = `${FONT}px ${getComputedStyle(el).fontFamily}`;
-  return ruler.measureText(text).width;
+const widths = new Map<string, number>();
+/** Rendered width of a label in `font`, cached: hover and arrow keys re-render the chart, labels rarely change. */
+function textWidth(text: string, font: string) {
+  const key = `${font}\n${text}`;
+  let v = widths.get(key);
+  if (v === undefined) {
+    ruler ??= document.createElement("canvas").getContext("2d");
+    if (ruler) ruler.font = font.split("|")[0]!;
+    v = ruler ? ruler.measureText(text).width : text.length * 6.6;
+    widths.set(key, v);
+  }
+  return v;
 }
 
 /**
- * Which axis labels to draw: left to right, each one that clears the last drawn label by `gap` px and stays
- * inside the chart. Labels that would collide are dropped instead of overlapping.
+ * Which axis labels to draw, and where: each label is pulled inside the chart's edges, the last one is always kept
+ * (the newest day matters most), and the rest go left to right wherever they clear the previous label by `gap` px.
+ * Labels that would collide are dropped instead of overlapping.
  */
-function thin(labels: string[], at: (i: number) => number, w: number, el: Element, gap: number) {
-  const show = new Set<number>();
+function thin(labels: string[], at: (i: number) => number, w: number, font: string, gap: number) {
+  const place = (i: number) => {
+    const half = textWidth(labels[i]!, font) / 2;
+    const c = Math.min(w - half, Math.max(half, at(i)));
+    return [c - half, c + half, c] as const;
+  };
+  const show = new Map<number, number>();
+  if (labels.length === 0) return show;
+  const last = labels.length - 1;
+  const [lastL, , lastC] = place(last);
   let edge = -Infinity;
-  labels.forEach((l, i) => {
-    const half = textWidth(l, el) / 2, c = at(i);
-    if (c - half >= edge + gap && c - half >= 0 && c + half <= w) {
-      show.add(i);
-      edge = c + half;
+  for (let i = 0; i < last; i++) {
+    const [l, r, c] = place(i);
+    if (l >= edge + gap && r + gap <= lastL) {
+      show.set(i, c);
+      edge = r;
     }
-  });
+  }
+  show.set(last, lastC);
   return show;
 }
 
@@ -94,17 +118,24 @@ function thin(labels: string[], at: (i: number) => number, w: number, el: Elemen
  * cancels it, and a finger tap leaves it up until the next tap outside the chart. Arrow keys move it while focused.
  */
 function useHover(box: RefObject<HTMLDivElement | null>, count: number) {
-  const [raw, setHover] = useState<number | null>(null);
+  const [raw, setRaw] = useState<number | null>(null);
+  // Announce only what the keyboard picked: a mouse sweep would otherwise fire dozens of announcements.
+  const [byKey, setByKey] = useState(false);
+  const setHover = (i: number | null, key = false) => { setRaw(i); setByKey(key); };
+  // Drop (not just hide) a highlight the data has shrunk past, so it can't come back when the data grows again.
+  if (raw !== null && raw >= count) setRaw(null);
   const hover = raw !== null && raw < count ? raw : null;
   useEffect(() => {
     if (raw === null) return;
-    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setHover(null); };
+    const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setRaw(null); };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [raw, box]);
   const step = (e: KeyboardEvent) => {
+    // Leave Alt/Cmd/Ctrl+arrow to the browser (history back/forward, text navigation).
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const to = { ArrowRight: (hover ?? -1) + 1, ArrowLeft: (hover ?? count) - 1, Home: 0, End: count - 1 }[e.key];
-    if (to !== undefined) { e.preventDefault(); setHover(Math.min(count - 1, Math.max(0, to))); }
+    if (to !== undefined) { e.preventDefault(); setHover(Math.min(count - 1, Math.max(0, to)), true); }
     else if (e.key === "Escape") setHover(null);
   };
   const events = {
@@ -113,7 +144,7 @@ function useHover(box: RefObject<HTMLDivElement | null>, count: number) {
     onKeyDown: step,
     onBlur: () => setHover(null),
   };
-  return [hover, setHover, events] as const;
+  return [hover, setHover, events, byKey] as const;
 }
 
 /** Right of the point when it fits, else left of it, and never past either edge of the chart. */
@@ -170,12 +201,12 @@ function YAxis({ ticks: ts, y, left, w, format }: { ticks: number[]; y: (v: numb
 
 /** Single series: daily check-ins. No legend (the title names it); crosshair tooltip on hover, touch or arrow keys. */
 export function AttendanceChart({ data, height = 220 }: { data: { date: string; visits: number }[]; height?: number }) {
-  const [box, w] = useWidth();
-  const [hover, setHover, events] = useHover(box, data.length);
+  const [box, w, font] = useBox();
+  const [hover, setHover, events, byKey] = useHover(box, data.length);
   // useId's punctuation isn't safe inside url(#…).
   const fill = `att${useId().replace(/[^\w-]/g, "")}`;
   const label = `Daily check-ins, ${data.length} days`;
-  if (!w || data.length === 0) return <Frame box={box} height={height} label={label} />;
+  if (!w || !font || data.length === 0) return <Frame box={box} height={height} label={label} />;
 
   const left = 36;
   const ts = ticks(Math.max(0, ...data.map((d) => d.visits)));
@@ -187,7 +218,7 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
   const line = monotone(pts);
   const area = `${line}L${pts.at(-1)![0]},${y(0)}L${pts[0]![0]},${y(0)}Z`;
   const days = data.map((d) => dayLabel(d.date));
-  const shown = thin(days, x, w, box.current!, 20);
+  const shown = thin(days, x, w, font, 20);
 
   const pick = (e: PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -198,7 +229,7 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
   const value = h ? `${h.visits.toLocaleString("en-IN")} check-ins` : "";
 
   return (
-    <Frame box={box} height={height} label={label} events={events} live={h ? `${dayLabel(h.date)}: ${value}` : ""}>
+    <Frame box={box} height={height} label={label} events={events} live={h && byKey ? `${dayLabel(h.date)}: ${value}` : ""}>
       <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick}>
         <defs>
           <linearGradient id={fill} x1="0" y1="0" x2="0" y2="1">
@@ -208,7 +239,7 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
         </defs>
         <YAxis ticks={ts} y={y} left={left} w={w} format={String} />
         {data.map((d, i) => (shown.has(i) ? (
-          <text key={d.date} x={x(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{days[i]}</text>
+          <text key={d.date} x={shown.get(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{days[i]}</text>
         ) : null))}
         <path d={area} fill={`url(#${fill})`} />
         <path d={line} fill="none" stroke="var(--brand)" strokeWidth={2} />
@@ -226,10 +257,10 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
 
 /** Single-hue bars for magnitude (e.g. revenue by stream). Labels are the categories; values in the tooltip. */
 export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: string; value: number }[]; unit: string; height?: number }) {
-  const [box, w] = useWidth();
-  const [hover, setHover, events] = useHover(box, data.length);
+  const [box, w, font] = useBox();
+  const [hover, setHover, events, byKey] = useHover(box, data.length);
   const label = data.map((d) => `${d.label}: ${d.value}`).join(", ");
-  if (!w || data.length === 0) return <Frame box={box} height={height} label={label} />;
+  if (!w || !font || data.length === 0) return <Frame box={box} height={height} label={label} />;
 
   const left = 44;
   const ts = ticks(Math.max(0, ...data.map((d) => d.value)));
@@ -240,7 +271,7 @@ export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: str
   const barW = Math.min(48, Math.max(1, band - gap * 2));
   const y = (v: number) => PAD.top + plotH - (v / top) * plotH;
   const cx = (i: number) => left + band * i + band / 2;
-  const shown = thin(data.map((d) => d.label), cx, w, box.current!, 8);
+  const shown = thin(data.map((d) => d.label), cx, w, font, 8);
 
   const pick = (e: PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -252,7 +283,7 @@ export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: str
   const r = Math.min(4, barW / 2);
 
   return (
-    <Frame box={box} height={height} label={label} events={events} live={h ? `${h.label}: ${value}` : ""}>
+    <Frame box={box} height={height} label={label} events={events} live={h && byKey ? `${h.label}: ${value}` : ""}>
       <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick}>
         {hover !== null && <rect x={left + band * hover} y={PAD.top} width={band} height={plotH} fill="var(--surface-2)" />}
         <YAxis ticks={ts} y={y} left={left} w={w} format={compact} />
@@ -267,7 +298,7 @@ export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: str
                   fill="var(--brand)"
                 />
               )}
-              {shown.has(i) && <text x={cx(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{d.label}</text>}
+              {shown.has(i) && <text x={shown.get(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{d.label}</text>}
             </g>
           );
         })}
