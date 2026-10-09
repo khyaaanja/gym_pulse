@@ -5,9 +5,12 @@ import { FileSpreadsheet, Loader2, ShieldCheck, UploadCloud, X } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/client";
 import { formatMoney } from "@/lib/money";
-import { formatDate } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { RecordsCheck as Result } from "@/services/imports/preview";
+
+// A calendar day ("YYYY-MM-DD") as "5 Oct 2026". Not @/lib/time's formatDate: that module pulls in date-fns-tz,
+// whose import-time time-zone probe cost the landing page ~50 ms of main thread on a mid-range phone.
+const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 const ACCEPT = ".csv,.xlsx,.xls,.pdf";
 const MAX_FILES = 6;
@@ -134,7 +137,7 @@ function Report({ r, onReset, focusRef }: { r: Result; onReset: () => void; focu
     <div ref={focusRef} tabIndex={-1} aria-live="polite" className="mt-8 outline-none">
       <p className="text-sm text-white/65">
         {plural(r.membersFound, "member")} · {plural(r.attendanceRecords, "visit")} read
-        {r.recordsEndBeforeToday && <> · counted up to {formatDate(r.asOf)}, the last day in your records</>}
+        {r.recordsEndBeforeToday && <> · counted up to {dayLabel(r.asOf)}, the last day in your records</>}
       </p>
       <h3 className="display mt-2 text-3xl font-extrabold leading-tight">
         {flagged > 0 ? <>{flagged} of {plural(r.membersFound, "member")} {flagged === 1 ? "needs" : "need"} a call.</> : <>No one looks likely to leave right now.</>}

@@ -2,8 +2,14 @@
 export const toPaisa = (rupees: number) => Math.round(rupees * 100);
 export const toRupees = (paisa: number) => paisa / 100;
 
-const grouping = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
-const groupingExact = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+// Built on first use, not at import: constructing them loads locale data, which held a phone's main thread for tens
+// of milliseconds on every page that merely imports this module.
+let grouping: Intl.NumberFormat | undefined;
+let groupingExact: Intl.NumberFormat | undefined;
+const formatter = (exact: boolean) =>
+  exact
+    ? (groupingExact ??= new Intl.NumberFormat("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 }))
+    : (grouping ??= new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }));
 
 /** Nepali rupee, as gyms in Nepal write it. Gyms can pick ₹, रु or NPR in Settings. */
 export const DEFAULT_CURRENCY_SYMBOL = "Rs.";
@@ -15,7 +21,7 @@ export function formatMoney(paisa: number | null | undefined, symbol = DEFAULT_C
   if (paisa === null || paisa === undefined) return "—";
   const sign = paisa < 0 ? "-" : "";
   const rupees = Math.abs(paisa) / 100;
-  return `${sign}${withSymbol(symbol, (exact ? groupingExact : grouping).format(rupees))}`;
+  return `${sign}${withSymbol(symbol, formatter(exact).format(rupees))}`;
 }
 
 /** Compact form for large dashboard figures: Rs. 1.2L, Rs. 3.4Cr (Nepali/Indian numbering). */
