@@ -10,11 +10,10 @@ export default defineConfig({
   expect: {
     timeout: 5000,
   },
-  // Use Chrome for all tests - channel: 'chrome' uses Google Chrome
-  // headless: false keeps the browser open after tests
+  // Playwright's bundled Chromium, headless, so the suite runs the same on a laptop and on a CI runner without a
+  // screen. Set HEADED=1 to watch it locally.
   use: {
-    channel: 'chrome', // Use Google Chrome channel
-    headless: false, // Keep browser open (not headless) - this is the key setting
+    headless: !process.env.HEADED,
     viewport: { width: 1280, height: 720 },
     // Base URL for tests - we'll use absolute URLs instead
     baseURL: 'http://localhost:3000',

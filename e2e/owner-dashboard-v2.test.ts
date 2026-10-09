@@ -4,10 +4,9 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { OWNER_EMAIL, OWNER_PASSWORD } from './credentials';
 
 const BASE_URL = 'http://localhost:3000';
-const OWNER_EMAIL = 'owner@pulsefitness.demo';
-const OWNER_PASSWORD = 'GymPulse!Demo2026';
 
 test('Comprehensive owner dashboard - V2 fixed', async ({ page }) => {
   // === LOGIN ===
@@ -20,7 +19,7 @@ test('Comprehensive owner dashboard - V2 fixed', async ({ page }) => {
   console.log('✅ Logged in and navigated to /app');
 
   // === BASIC VERIFICATION ===
-  await page.screenshot({ path: 'v2-dashboard-start.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/v2-dashboard-start.png', fullPage: true });
   await expect(page.locator('body')).toContainText('GymPulse');
   console.log('✅ Dashboard has GymPulse branding');
 
@@ -158,7 +157,6 @@ test('Comprehensive owner dashboard - V2 fixed', async ({ page }) => {
   console.log('✅ Owner login: PASS');
   console.log('✅ Navigation to /app: PASS');
   console.log('✅ Dashboard loads with GymPulse content: PASS');
-  console.log('✅ Browser stays open throughout: PASS');
 
   console.log('\n📊 DISCOVERIES:');
   console.log(`  - ${buttonCount} buttons on /app page`);
@@ -168,7 +166,7 @@ test('Comprehensive owner dashboard - V2 fixed', async ({ page }) => {
   console.log('  - /app/settings route may need further exploration');
   console.log('  - Pulse/Members at Risk visibility varies');
 
-  await page.screenshot({ path: 'v2-dashboard-final.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/v2-dashboard-final.png', fullPage: true });
   console.log('📸 Screenshots saved: v2-dashboard-start.png, v2-dashboard-final.png');
 
   console.log('\n✅ Comprehensive owner dashboard test V2 complete!');

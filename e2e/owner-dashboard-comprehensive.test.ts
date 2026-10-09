@@ -4,14 +4,12 @@
  * This test thoroughly explores the owner account dashboard after login,
  * checking all buttons, functions, and features for broken functionality.
  * 
- * The browser stays open after test completion as requested.
  */
 
 import { test, expect } from '@playwright/test';
+import { OWNER_EMAIL, OWNER_PASSWORD } from './credentials';
 
 const BASE_URL = 'http://localhost:3000';
-const OWNER_EMAIL = 'owner@pulsefitness.demo';
-const OWNER_PASSWORD = 'GymPulse!Demo2026';
 
 test('Comprehensive owner dashboard - check all buttons and features', async ({ page }) => {
   // =====================================================
@@ -43,7 +41,7 @@ test('Comprehensive owner dashboard - check all buttons and features', async ({ 
   console.log('\\n=== STEP 3: Exploring dashboard area ===');
   
   // Take a screenshot of the dashboard
-  await page.screenshot({ path: 'dashboard-after-login.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/dashboard-after-login.png', fullPage: true });
   console.log('📸 Screenshot saved: dashboard-after-login.png');
 
   // Verify we're on a page with GymPulse content
@@ -215,12 +213,11 @@ test('Comprehensive owner dashboard - check all buttons and features', async ({ 
   console.log('✅ Owner login successful');
   console.log('✅ Navigation to /app working');
   console.log('✅ Dashboard loads with GymPulse content');
-  console.log('✅ Browser stays open (headless: false)');
   console.log('\\n⚠️  Note: Some features may require specific data or permissions');
   console.log('⚠️  Test explored ${linkCount} interactive elements and ${buttonCount} buttons');
   
   // Final screenshot
-  await page.screenshot({ path: 'dashboard-final-state.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/dashboard-final-state.png', fullPage: true });
   console.log('📸 Final dashboard screenshot saved: dashboard-final-state.png');
   
   console.log('\\n✅ Comprehensive owner dashboard test complete!');

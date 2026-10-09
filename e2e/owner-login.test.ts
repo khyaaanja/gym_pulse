@@ -1,21 +1,18 @@
 /**
  * GymPulse Owner Login Test
  * 
- * This test demonstrates logging in as a gym owner using Playwright with Chrome.
- * The browser stays open after login as requested (headless: false in config).
- * 
- * Demo credentials (from prisma/seed.ts):
- *   Owner: owner@pulsefitness.demo
- *   Password: GymPulse!Demo2026
+ * Logs in as the demo gym owner (seeded by prisma/seed.ts).
+ *
+ * Credentials:
+ *   Owner: E2E_OWNER_EMAIL / E2E_OWNER_PASSWORD (see ./credentials.ts)
  */
 
 import { test, expect } from '@playwright/test';
+import { OWNER_EMAIL, OWNER_PASSWORD } from './credentials';
 
 const BASE_URL = 'http://localhost:3000';
-const OWNER_EMAIL = 'owner@pulsefitness.demo';
-const OWNER_PASSWORD = 'GymPulse!Demo2026';
 
-test('Owner login keeps browser open', async ({ page }) => {
+test('Owner can log in and reach the dashboard', async ({ page }) => {
   // Step 1: Navigate to the login page
   console.log(`Navigating to ${BASE_URL}/login...`);
   await page.goto(`${BASE_URL}/login`);
@@ -41,10 +38,7 @@ test('Owner login keeps browser open', async ({ page }) => {
   // The /app page should have GymPulse content
   await expect(page.locator('body')).toContainText('GymPulse');
 
-  console.log('✅ Owner login successful! Browser staying open as requested.');
-  
-  // Browser stays open due to headless: false in playwright.config.ts
-  // Test completes but browser window remains visible
+  console.log('✅ Owner login successful');
 });
 
 // Additional test: Verify MFA flow if applicable
@@ -65,7 +59,7 @@ test('Owner login with MFA', async ({ page }) => {
     // The MFA page might have a TOTP or code entry field
     // For now, just wait and observe
     await page.waitForTimeout(3000);
-    console.log('MFA test completed - browser remains open');
+    console.log('MFA test completed');
   } else {
     console.log('No MFA required - already logged in');
     // Wait for navigation to /app
