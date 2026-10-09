@@ -8,6 +8,7 @@
  * production bootstrap never undoes what a super-admin has edited.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
+import type { Tx } from "@/db/client";
 import type { Channel } from "@/generated/prisma/enums";
 import { DEFAULT_TEMPLATES, type TemplateKey } from "@/services/notifications/templates";
 import { LEGAL_DOCS } from "@/content/legal";
@@ -15,7 +16,7 @@ import { hashPassword, passwordSchema } from "@/lib/auth/password";
 
 export type ReferenceDataOptions = { overwrite: boolean; supportEmail: string };
 
-export async function platformReferenceData(db: PrismaClient, opts: ReferenceDataOptions) {
+export async function platformReferenceData(db: PrismaClient | Tx, opts: ReferenceDataOptions) {
   const plans = [
     { key: "starter", name: "Starter", pricePaisa: 199_900, memberLimit: 100, staffLimit: 3, storageLimitMb: 500, importsPerMonth: 5, predictionsPerMonth: 10, notificationsPerMonth: 1000, sortOrder: 1, freeMonths: 1, highlights: ["Up to 100 members and 3 staff", "Daily list of members who may leave", "5 imports and 10 risk estimates a month", "SMS, email and in-app reminders"] },
     { key: "growth", name: "Growth", pricePaisa: 349_900, memberLimit: 300, staffLimit: 10, storageLimitMb: 2000, importsPerMonth: 20, predictionsPerMonth: 50, notificationsPerMonth: 5000, sortOrder: 2, freeMonths: 3, highlights: ["Up to 300 members and 10 staff", "20 imports and 50 risk estimates a month", "WhatsApp reminders", "Your own shop for PT packs and classes"] },
@@ -127,34 +128,52 @@ export async function platformReferenceData(db: PrismaClient, opts: ReferenceDat
   return planRows;
 }
 
-export type BootstrapOptions = { adminEmail: string; adminPassword: string; adminName?: string; supportEmail: string };
-export type BootstrapResult = { adminCreated: boolean; adminEmail: string | null };
+export type BootstrapOptions = { adminEmail?: string; adminPassword?: string; adminName?: string; supportEmail?: string };
+export type BootstrapResult = { referenceDataCreated: boolean; adminCreated: boolean; adminEmail: string | null };
 
 const PLACEHOLDER_EMAIL = /(@(gympulse\.(example|local)|example\.(com|org|net))|\.demo)$/i;
+/** Set when the bootstrap has written reference data once. Later runs leave reference data alone entirely. */
+export const REFERENCE_DATA_MARKER = "platform.referenceDataSeededAt";
+
+function realEmail(name: string, value: string | undefined): string {
+  const v = value?.trim().toLowerCase() ?? "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error(`Bootstrap: ${name} "${v}" is not an email address`);
+  if (PLACEHOLDER_EMAIL.test(v)) throw new Error(`Bootstrap: ${name} "${v}" is a placeholder; use a real address`);
+  return v;
+}
 
 /**
- * Production first run: reference data plus the first super-admin. Idempotent: the admin is created only while no
- * SUPER_ADMIN exists, and reference data is never overwritten. Like admins created from the console, the new admin
- * must reset the password and enrol MFA at first sign-in.
+ * Production first run: platform reference data and the first super-admin. Safe to run again:
+ * - Reference data is written once (marked by REFERENCE_DATA_MARKER). A re-run never re-creates a row a super-admin
+ *   deleted on purpose (a cleared feature-flag override, a removed automation rule) nor overwrites one they edited.
+ * - The admin is created only while no SUPER_ADMIN exists. Inputs are checked only for the step that needs them,
+ *   so a re-run needs no password.
+ * - Runs under a transaction-scoped advisory lock, so two concurrent runs can't both create an admin.
+ * Like admins created from the console, the new admin must reset the password and enrol MFA at first sign-in.
  */
 export async function bootstrapPlatform(db: PrismaClient, opts: BootstrapOptions): Promise<BootstrapResult> {
-  const adminEmail = opts.adminEmail.trim().toLowerCase();
-  const supportEmail = opts.supportEmail.trim();
-  for (const [name, value] of [["admin email", adminEmail], ["support email", supportEmail]] as const) {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new Error(`Bootstrap: ${name} "${value}" is not an email address`);
-    if (PLACEHOLDER_EMAIL.test(value)) throw new Error(`Bootstrap: ${name} "${value}" is a placeholder; use a real address`);
-  }
-  const pw = passwordSchema.safeParse(opts.adminPassword);
-  if (!pw.success) throw new Error(`Bootstrap: admin password rejected: ${pw.error.issues.map((i) => i.message).join("; ")}`);
-  // The platform owner's account can reach every gym: hold it to more than the console's 10-character minimum.
-  if (opts.adminPassword.length < 16) throw new Error("Bootstrap: admin password rejected: use at least 16 characters.");
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('gympulse.bootstrap'))`;
 
-  await platformReferenceData(db, { overwrite: false, supportEmail });
+    let referenceDataCreated = false;
+    if (!(await tx.platformSetting.findUnique({ where: { key: REFERENCE_DATA_MARKER } }))) {
+      const supportEmail = realEmail("support email", opts.supportEmail);
+      await platformReferenceData(tx, { overwrite: false, supportEmail });
+      await tx.platformSetting.create({ data: { key: REFERENCE_DATA_MARKER, value: new Date().toISOString(), description: "When the production bootstrap wrote platform reference data" } });
+      referenceDataCreated = true;
+    }
 
-  if (await db.platformAdmin.count({ where: { role: "SUPER_ADMIN" } })) return { adminCreated: false, adminEmail: null };
-  const admin = await db.platformAdmin.create({
-    data: { email: adminEmail, name: opts.adminName?.trim() || "Platform owner", role: "SUPER_ADMIN", passwordHash: await hashPassword(opts.adminPassword), mustResetPassword: true, mfaRequired: true },
-  });
-  await db.auditLog.create({ data: { actorType: "SYSTEM", action: "admins.bootstrapped", entityType: "PlatformAdmin", entityId: admin.id, metadata: { email: admin.email, role: admin.role } } });
-  return { adminCreated: true, adminEmail: admin.email };
+    if (await tx.platformAdmin.count({ where: { role: "SUPER_ADMIN" } })) return { referenceDataCreated, adminCreated: false, adminEmail: null };
+    const adminEmail = realEmail("admin email", opts.adminEmail);
+    const password = opts.adminPassword ?? "";
+    const pw = passwordSchema.safeParse(password);
+    if (!pw.success) throw new Error(`Bootstrap: admin password rejected: ${pw.error.issues.map((i) => i.message).join("; ")}`);
+    // The platform owner's account can reach every gym: hold it to more than the console's 10-character minimum.
+    if (password.length < 16) throw new Error("Bootstrap: admin password rejected: use at least 16 characters.");
+    const admin = await tx.platformAdmin.create({
+      data: { email: adminEmail, name: opts.adminName?.trim() || "Platform owner", role: "SUPER_ADMIN", passwordHash: await hashPassword(password), mustResetPassword: true, mfaRequired: true },
+    });
+    await tx.auditLog.create({ data: { actorType: "SYSTEM", action: "admins.bootstrapped", entityType: "PlatformAdmin", entityId: admin.id, metadata: { email: admin.email, role: admin.role } } });
+    return { referenceDataCreated, adminCreated: true, adminEmail: admin.email };
+  }, { timeout: 120_000, maxWait: 60_000 });
 }

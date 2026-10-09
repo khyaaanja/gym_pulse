@@ -1,5 +1,5 @@
 /**
- * Demo data for local development and demos. Refuses to run in production.
+ * Demo data for local development and demos. Runs only with APP_ENV=development or test.
  * Creates: platform config (plans, flags, providers, templates, automations, commissions, content),
  * three gyms (a healthy 200-member gym, a tiny trial gym with too little data for an estimate,
  * and a suspended gym), 7 months of attendance, memberships, payments, marketplace activity,
@@ -15,8 +15,11 @@ import { streakFrom } from "@/services/attendance";
 import { SYSTEM_ACTOR } from "@/lib/audit";
 import { platformReferenceData } from "./reference-data";
 
-if (process.env.APP_ENV === "production") {
-  console.error("Refusing to seed demo data in production.");
+// Demo data includes admins with a password published in this repo. Only local environments may have it; staging
+// is reachable from the internet, so it gets `npm run db:bootstrap` like production.
+const SEEDABLE = ["development", "test"];
+if (!SEEDABLE.includes(process.env.APP_ENV ?? "development")) {
+  console.error(`Refusing to seed demo data with APP_ENV=${process.env.APP_ENV}. Use npm run db:bootstrap.`);
   process.exit(1);
 }
 
