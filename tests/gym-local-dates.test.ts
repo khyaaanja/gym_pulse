@@ -29,6 +29,7 @@ describe("dates are the gym's local dates", () => {
     await prisma.attendance.create({ data: { gymId: gym.id, memberId: member.id, checkedInAt: EARLY_MORNING, localDate: new Date("2026-10-02T00:00:00Z"), method: "STAFF" } });
     const csv = (await buildReport(gym.id, "attendance", range("2026-10-02"))).csv;
     expect(csv).toContain("2026-10-02,01:45,");
+    expect(csv.split("\n")[0]).toContain("Date,Time,"); // not labelled UTC: the times are local
   });
 
   it("marketplace order numbers carry the gym's date", async () => {

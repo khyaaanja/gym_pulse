@@ -104,7 +104,8 @@ export async function buildReport(gymId: string, key: ReportKey, range: Range): 
   const to = toDbDate(range.to);
   // Instants are written as the gym's local date.
   const day = (x: Date | null | undefined) => (x ? localDate(x, tz) : "");
-  const hhmm = (x: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(x);
+  const timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const hhmm = (x: Date) => timeFmt.format(x);
   const LIMIT = 50_000;
   let headers: string[] = [];
   let rows: unknown[][] = [];
@@ -117,7 +118,7 @@ export async function buildReport(gymId: string, key: ReportKey, range: Range): 
     }
     case "attendance": {
       const a = await db.attendance.findMany({ where: { localDate: { gte: fromDay, lte: to } }, include: { member: { select: { memberCode: true, fullName: true } }, location: { select: { name: true } } }, orderBy: { checkedInAt: "asc" }, take: LIMIT });
-      headers = ["Date", "Time (UTC)", "Member ID", "Name", "Method", "Branch"];
+      headers = ["Date", "Time", "Member ID", "Name", "Method", "Branch"];
       rows = a.map((x) => [d(x.localDate), hhmm(x.checkedInAt), x.member.memberCode, x.member.fullName, x.method, x.location?.name]);
       break;
     }

@@ -199,6 +199,9 @@ automation rules and legal content were also created only by the demo seed.
 - The demo seed (`npm run db:seed`) now runs **only** with `APP_ENV=development` or `test`, so staging can't get
   demo admins either.
 - Tests: `tests/bootstrap.test.ts` (fresh schema built from the migrations; race, idempotency, deletions, validation).
+- On a database that already has data but no `platform.referenceDataSeededAt` marker (a dev database filled by
+  `db:seed`), the first `db:bootstrap` asks for `BOOTSTRAP_SUPPORT_EMAIL`, fills in any missing reference rows once,
+  and then sets the marker. On a fresh production database this is simply the first run.
 
 ### 1.5 🔴 Payment transactions: give them headroom (QA #2)
 

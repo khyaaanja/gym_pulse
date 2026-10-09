@@ -1,7 +1,7 @@
 import { CheckCircle2, Flame, Medal, Trophy } from "lucide-react";
 import type { MemberContext } from "@/lib/api";
 import { attendanceSummary } from "@/services/attendance";
-import { addDays, today as todayIn, weekday } from "@/lib/time";
+import { addDays, formatDate, today as todayIn, weekday } from "@/lib/time";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/misc";
 import { MemberPass } from "./member-pass";
@@ -129,7 +129,7 @@ export async function MemberAttendance({ ctx }: { ctx: MemberContext }) {
               {s.rewards.map((r) => (
                 <li key={r.id} className="flex items-center justify-between py-2.5 text-sm">
                   <span>{r.name}</span>
-                  <span className="text-ink-3">{new Date(r.awardedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}{r.redeemedAt ? " · redeemed" : ""}</span>
+                  <span className="text-ink-3">{formatDate(new Date(r.awardedAt), { day: "numeric", month: "short" }, ctx.gym.timezone)}{r.redeemedAt ? " · redeemed" : ""}</span>
                 </li>
               ))}
             </ul>
