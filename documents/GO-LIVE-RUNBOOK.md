@@ -509,6 +509,8 @@ services:
     env_file: .env.production
     environment: { RUN_WORKER_IN_PROCESS: "false" }
     volumes: ["storage:/data/storage"]
+    read_only: true                      # same hardening the CI docker job tests
+    tmpfs: ["/tmp", "/app/.next/cache"]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
@@ -518,6 +520,8 @@ services:
     env_file: .env.production
     healthcheck: { disable: true }       # the image's HEALTHCHECK probes HTTP; the worker has no HTTP server
     volumes: ["storage:/data/storage"]
+    read_only: true                      # same hardening the CI docker job tests
+    tmpfs: ["/tmp", "/app/.next/cache"]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
