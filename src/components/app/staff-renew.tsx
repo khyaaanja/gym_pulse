@@ -10,32 +10,27 @@ import { Table, Td, Th } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { memberScope } from "@/lib/scope";
+import { dueForRenewal } from "@/services/memberships";
+
+/** The desk works the list top-down (soonest first); past this, the header says how many more are due. */
+const RENEW_LIST_LIMIT = 200;
 
 export async function StaffRenew({ ctx, status }: { ctx: GymContext; status: string }) {
   const today = todayIn(ctx.gym.timezone);
   const grace = gymSettings(ctx.gym.settings).renewal.gracePeriodDays;
   const sym = ctx.gym.currencySymbol;
-  const [expiring, plans, payments] = await Promise.all([
-    ctx.db.membership.findMany({
-      where: { status: { in: ["ACTIVE", "EXPIRED"] }, endDate: { gte: toDbDate(addDays(today, -grace)), lte: toDbDate(addDays(today, 14)) }, renewedTo: { is: null }, member: { archivedAt: null, ...memberScope(ctx) } },
-      include: { member: { select: { id: true, fullName: true, phone: true } }, plan: true },
-      orderBy: { endDate: "asc" },
-      take: 60,
-    }),
+  const [{ rows: due, total: dueTotal }, plans, payments] = await Promise.all([
+    dueForRenewal(ctx.db, { today, graceDays: grace, memberWhere: memberScope(ctx), take: RENEW_LIST_LIMIT }),
     ctx.db.membershipPlan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     ctx.can("payments.view") ? ctx.db.payment.findMany({ where: status === "ALL" ? {} : { status: status as "FAILED" }, include: { member: { select: { id: true, fullName: true } }, invoice: { select: { number: true } } }, orderBy: { createdAt: "desc" }, take: 40 }) : Promise.resolve([]),
   ]);
-  // Hide memberships already followed by a later one (renewed through another path).
-  const later = await ctx.db.membership.findMany({ where: { memberId: { in: expiring.map((e) => e.memberId) }, startDate: { gt: toDbDate(today) } }, select: { memberId: true } });
-  const renewed = new Set(later.map((l) => l.memberId));
-  const due = expiring.filter((e) => !renewed.has(e.memberId));
   const planOptions = plans.map((p) => ({ value: p.id, label: `${p.name} — ${formatMoney(p.pricePaisa, sym)}` }));
 
   return (
     <>
       <PageHeader title="Renew" description={`Memberships ending in the next 14 days, plus anyone still inside the ${grace}-day grace period. Reminders go out automatically before expiry.`} />
       <Card>
-        <CardHeader title="Due for renewal" description={`${due.length} members`} />
+        <CardHeader title="Due for renewal" description={dueTotal > due.length ? `Showing the ${due.length} ending soonest of ${dueTotal} members` : `${dueTotal} members`} />
         <CardBody>
           {due.length === 0 ? <p className="text-sm text-ink-3">No renewals due in the next two weeks.</p> : (
             <Table>

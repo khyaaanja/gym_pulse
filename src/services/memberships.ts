@@ -3,7 +3,7 @@ import { tenantDb, type TenantDb } from "@/db/tenant";
 import { addDays, fromDbDate, toDbDate, today as todayIn, type DateOnly } from "@/lib/time";
 import { monthlyEquivalent } from "@/lib/money";
 import { badRequest, notFound } from "@/lib/errors";
-import type { Membership, MembershipPlan, RecordSource } from "@/generated/prisma/client";
+import type { Membership, MembershipPlan, Prisma, RecordSource } from "@/generated/prisma/client";
 
 export type ActiveMembership = Membership & { plan: MembershipPlan };
 
@@ -22,6 +22,26 @@ export async function latestMembership(db: TenantDb | Tx, memberId: string) {
     include: { plan: true },
     orderBy: { endDate: "desc" },
   });
+}
+
+/**
+ * Memberships the desk should renew: ending within the next 14 days or still inside the grace period, not already
+ * renewed, and with no later membership starting (renewed through another path). Every filter is in the query, so
+ * `take` can only cut the list short, never hide a due member behind one that was filtered out afterwards; `total`
+ * is the true count so the page can say when it is showing only part of the list.
+ */
+export async function dueForRenewal(db: TenantDb, opts: { today: DateOnly; graceDays: number; memberWhere?: Prisma.MemberWhereInput; take: number }) {
+  const where: Prisma.MembershipWhereInput = {
+    status: { in: ["ACTIVE", "EXPIRED"] },
+    endDate: { gte: toDbDate(addDays(opts.today, -opts.graceDays)), lte: toDbDate(addDays(opts.today, 14)) },
+    renewedTo: { is: null },
+    member: { archivedAt: null, ...opts.memberWhere, memberships: { none: { startDate: { gt: toDbDate(opts.today) } } } },
+  };
+  const [rows, total] = await Promise.all([
+    db.membership.findMany({ where, include: { member: { select: { id: true, fullName: true, phone: true } }, plan: true }, orderBy: { endDate: "asc" }, take: opts.take }),
+    db.membership.count({ where }),
+  ]);
+  return { rows, total };
 }
 
 export function membershipMonthlyFee(m: { pricePaisa: number; plan: { durationDays: number } }) {
