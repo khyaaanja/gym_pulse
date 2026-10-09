@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("next/headers", async () => (await import("./helpers/route")).nextHeaders);
 import { prisma } from "@/db/client";
 import { tenantDb } from "@/db/tenant";
 import { today } from "@/lib/time";
 import { dueForRenewal } from "@/services/memberships";
 import { makeGym, makeMember } from "./helpers/fixtures";
+import { signInStaff, signOut } from "./helpers/route";
+import { actionCenter } from "@/services/analytics";
 import { giveMembership } from "./helpers/money";
 
 const TZ = "Asia/Kathmandu";
@@ -35,6 +38,33 @@ describe("renewal list (desk Renew page)", () => {
     const capped = await dueForRenewal(tenantDb(gym.id), { today: today(TZ), graceDays: 7, take: 2 });
     expect(capped.total).toBe(4);
     expect(capped.rows.map((r) => r.memberId)).toEqual([expected[3]!.id, expected[0]!.id]); // soonest end first
+  });
+
+  it("applies the viewer's member scope (a trainer sees only their own members)", async () => {
+    const { gym, plan } = await makeGym();
+    const { staff: trainer } = await signInStaff(gym.id, "TRAINER");
+    signOut();
+    const mine = await makeMember(gym.id);
+    await prisma.member.update({ where: { id: mine.id }, data: { trainerId: trainer.id } });
+    const other = await makeMember(gym.id);
+    for (const m of [mine, other]) await giveMembership(gym.id, m.id, plan.id, -25, 5, TZ);
+    const res = await dueForRenewal(tenantDb(gym.id), { today: today(TZ), graceDays: 7, take: 50, memberWhere: { trainerId: trainer.id } });
+    expect(res.total).toBe(1);
+    expect(res.rows.map((r) => r.memberId)).toEqual([mine.id]);
+  });
+
+  it("the owner dashboard's expiring list uses the same rule", async () => {
+    const { gym, plan } = await makeGym();
+    const due = await makeMember(gym.id);
+    await giveMembership(gym.id, due.id, plan.id, -25, 3, TZ);
+    const renewedElsewhere = await makeMember(gym.id);
+    await giveMembership(gym.id, renewedElsewhere.id, plan.id, -27, 1, TZ);
+    await giveMembership(gym.id, renewedElsewhere.id, plan.id, 2, 32, TZ);
+    const archived = await makeMember(gym.id);
+    await giveMembership(gym.id, archived.id, plan.id, -25, 2, TZ);
+    await prisma.member.update({ where: { id: archived.id }, data: { archivedAt: new Date() } });
+    const ac = await actionCenter(await prisma.gym.findUniqueOrThrow({ where: { id: gym.id } }));
+    expect(ac.expiring.map((m) => m.memberId)).toEqual([due.id]);
   });
 
   it("never lists another gym's members", async () => {

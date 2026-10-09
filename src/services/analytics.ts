@@ -143,7 +143,8 @@ export async function actionCenter(gym: Gym) {
     db.member.findMany({ where: { archivedAt: null, riskCategory: "CRITICAL", riskStatus: { in: ["AT_RISK", "ATTENTION"] } }, orderBy: { riskScore: "desc" }, take: 10, select: { id: true, fullName: true, riskScore: true, lastAttendanceAt: true, phone: true } }),
     db.member.count({ where: { archivedAt: null, riskStatus: "AT_RISK" } }),
     db.membership.findMany({
-      where: { status: "ACTIVE", endDate: { gte: toDbDate(today), lte: toDbDate(addDays(today, 7)) }, renewedTo: { is: null } },
+      // Same "really due" rule as the Renew page (dueForRenewal): not archived, not already renewed another way.
+      where: { status: "ACTIVE", endDate: { gte: toDbDate(today), lte: toDbDate(addDays(today, 7)) }, renewedTo: { is: null }, member: { archivedAt: null, memberships: { none: { startDate: { gt: toDbDate(today) } } } } },
       include: { member: { select: { id: true, fullName: true, phone: true } }, plan: { select: { name: true } } },
       orderBy: { endDate: "asc" },
       take: 20,
