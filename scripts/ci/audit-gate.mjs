@@ -6,6 +6,13 @@ import { readFileSync } from "node:fs";
 const FAIL_ON = new Set(["high", "critical"]);
 const allow = JSON.parse(readFileSync(new URL("../../.github/audit-allowlist.json", import.meta.url), "utf8")).advisories;
 const today = new Date().toISOString().slice(0, 10);
+for (const entry of allow) {
+  if (!/^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/.test(entry.id ?? "")) throw new Error(`allowlist: bad id ${entry.id}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.until ?? "") || Number.isNaN(Date.parse(entry.until))) {
+    throw new Error(`allowlist: ${entry.id} needs an "until" date as YYYY-MM-DD`);
+  }
+  if (!entry.reason) throw new Error(`allowlist: ${entry.id} needs a reason`);
+}
 
 let raw;
 try {
@@ -16,6 +23,10 @@ try {
 }
 const report = JSON.parse(raw);
 if (report.error) throw new Error(`npm audit failed: ${JSON.stringify(report.error)}`);
+// Refuse to pass on a report shape this script doesn't understand.
+if (report.auditReportVersion !== 2 || !report.vulnerabilities || !report.metadata?.vulnerabilities) {
+  throw new Error(`unexpected npm audit report format (auditReportVersion ${report.auditReportVersion})`);
+}
 
 const found = new Map();
 for (const v of Object.values(report.vulnerabilities ?? {})) {
@@ -27,6 +38,8 @@ for (const v of Object.values(report.vulnerabilities ?? {})) {
 }
 
 const problems = [];
+const counted = report.metadata.vulnerabilities.high + report.metadata.vulnerabilities.critical;
+if (counted > 0 && found.size === 0) problems.push(`npm reports ${counted} high/critical packages but none were parsed`);
 for (const a of found.values()) {
   const entry = allow.find((x) => x.id === a.id);
   if (!entry) problems.push(`NOT ACCEPTED  ${a.severity}  ${a.id}  ${a.package}: ${a.title}`);

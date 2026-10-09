@@ -2,18 +2,21 @@ name: deploy
 
 # Continuous delivery.
 #
-#   push to main ─► ci (all jobs green) ─► publish image ghcr.io/<owner>/<repo>:<commit sha> ─► staging (automatic)
-#   production: only by hand (Actions ► deploy ► Run workflow), naming a commit SHA that is already published.
+#   push to main ─► ci (every job green) ─► publish ghcr.io/<owner>/<repo>:<commit sha> ─► staging (automatic)
+#   production: only by hand (Actions ► deploy ► Run workflow) with the SHA and digest printed by a publish run.
 #
 # Safety rails:
-# - Only commits whose ci run succeeded on a push to main are ever built into an image. The workflow definition
-#   that runs is always the one on main, so a pull request cannot change what deploys.
-# - Deploy jobs do nothing until the environment is switched on (repository variables STAGING_DEPLOY_ENABLED /
-#   PRODUCTION_DEPLOY_ENABLED = true) and its secrets exist. Secrets live in the GitHub *environment*, not the repo.
-# - Production is never automatic. The manual run is the approval; on a plan that supports it, also add yourself as
-#   a required reviewer on the `production` environment.
-# - One deploy per environment at a time, never cancelled half-way.
-# - Rollback = run this workflow by hand with an older SHA.
+# - Only commits whose ci run succeeded on a push to main are built into an image. The workflow definition that runs
+#   on workflow_run is always main's, so a pull request cannot change what deploys.
+# - Images are deployed by digest (immutable), never by tag. The server also checks the running container's revision
+#   label against the commit SHA.
+# - Staging and production use separately named settings (STAGING_* / PRODUCTION_*), so they can't silently share a
+#   host or key even on plans without GitHub Environments. scripts/deploy.sh refuses if the two hosts are the same.
+# - Deploy jobs do nothing until switched on with repository variables STAGING_DEPLOY_ENABLED /
+#   PRODUCTION_DEPLOY_ENABLED = true.
+# - Production is never automatic. On GitHub Pro/Team, also add yourself as a required reviewer on the `production`
+#   environment and restrict it to main.
+# - One deploy per environment at a time, never cancelled half-way. Rollback = a manual run with an older SHA+digest.
 on:
   workflow_run:
     workflows: [ci]
@@ -27,7 +30,11 @@ on:
         options: [staging, production]
         required: true
       sha:
-        description: Full 40-character commit SHA of an already-published image (see the publish job of an earlier run)
+        description: Full 40-character commit SHA (from the publish run summary)
+        type: string
+        required: true
+      digest:
+        description: Image digest sha256:... (from the same publish run summary)
         type: string
         required: true
 
@@ -49,6 +56,7 @@ jobs:
       packages: write
     outputs:
       sha: ${{ steps.vars.outputs.sha }}
+      image: ${{ steps.vars.outputs.image }}
       digest: ${{ steps.push.outputs.digest }}
     steps:
       - id: vars
@@ -66,6 +74,9 @@ jobs:
           persist-credentials: false
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # BuildKit pinned by digest too; the action's default image is a moving tag.
+          driver-opts: image=moby/buildkit:v0.34.0@sha256:b059f8d7226d0b326bc871af489a5dddf65e36af4d20d14251b072974d9ee87c
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -73,7 +84,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Tagged only with the immutable commit SHA: there is no `latest`, so what runs is always explicit.
+      # Tagged only with the commit SHA (no `latest`); deploys then use the digest, which can't be re-pointed.
       - id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -95,9 +106,13 @@ jobs:
         run: |
           {
             echo "### Published"
-            echo "\`${IMAGE}:${SHA}\`"
+            echo "| | |"
+            echo "|---|---|"
+            echo "| image | \`${IMAGE}\` |"
+            echo "| sha | \`${SHA}\` |"
+            echo "| digest | \`${DIGEST}\` |"
             echo
-            echo "digest \`${DIGEST}\`"
+            echo "Production: Actions ► deploy ► Run workflow with this sha and digest."
           } >> "$GITHUB_STEP_SUMMARY"
 
   staging:
@@ -108,28 +123,44 @@ jobs:
     timeout-minutes: 20
     environment:
       name: staging
-      url: ${{ vars.APP_URL }}
+      url: ${{ vars.STAGING_APP_URL }}
     concurrency:
       group: deploy-staging
       cancel-in-progress: false
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # If a newer commit landed on main meanwhile, its own run deploys it; never move staging backwards.
+      - name: Still the head of main?
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.publish.outputs.sha }}
+        run: |
+          head=$(gh api "repos/$REPO/commits/main" -q .sha)
+          if [ "$head" = "$SHA" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "main is at $head; skipping $SHA"; fi
+
+      - if: steps.head.outputs.go == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.publish.outputs.sha }}
           persist-credentials: false
-      - name: Deploy
+
+      - if: steps.head.outputs.go == 'true'
+        name: Deploy
         env:
           TAG: ${{ needs.publish.outputs.sha }}
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          APP_URL: ${{ vars.APP_URL }}
+          IMAGE_REF: ${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}
+          DEPLOY_HOST: ${{ vars.STAGING_DEPLOY_HOST }}
+          OTHER_HOST: ${{ vars.PRODUCTION_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.STAGING_DEPLOY_USER }}
+          APP_URL: ${{ vars.STAGING_APP_URL }}
+          DEPLOY_SSH_KEY: ${{ secrets.STAGING_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.STAGING_DEPLOY_KNOWN_HOSTS }}
         run: scripts/deploy.sh
 
-  # Manual deploy of an existing image: production releases, staging re-deploys, and rollbacks.
+  # Manual deploy of an already-published image: production releases, staging re-deploys, and rollbacks.
   manual:
     name: deploy ${{ inputs.environment }} (manual)
     if: >-
@@ -141,7 +172,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
-      url: ${{ vars.APP_URL }}
+      url: ${{ inputs.environment == 'production' && vars.PRODUCTION_APP_URL || vars.STAGING_APP_URL }}
     concurrency:
       group: deploy-${{ inputs.environment }}
       cancel-in-progress: false
@@ -149,17 +180,23 @@ jobs:
       contents: read
       packages: read
     steps:
-      - name: Check the requested image exists
+      - name: Check the image exists and the tag still points at that digest
+        id: image
         env:
           SHA: ${{ inputs.sha }}
+          DIGEST: ${{ inputs.digest }}
           REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           ACTOR: ${{ github.actor }}
         run: |
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-character lowercase commit SHA"; exit 1; }
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "digest must look like sha256:<64 hex>"; exit 1; }
+          image="ghcr.io/${REPO,,}"
           echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
-          docker buildx imagetools inspect "ghcr.io/${REPO,,}:${SHA}"
+          tagged=$(docker buildx imagetools inspect "$image:$SHA" --format '{{json .Manifest}}' | jq -r .digest)
           docker logout ghcr.io
+          [ "$tagged" = "$DIGEST" ] || { echo "tag $SHA points at $tagged, not $DIGEST: refusing"; exit 1; }
+          echo "ref=$image@$DIGEST" >> "$GITHUB_OUTPUT"
 
       # The deploy script comes from main (this run), not from the old commit being rolled back to.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -168,10 +205,26 @@ jobs:
 
       - name: Deploy
         env:
+          TARGET: ${{ inputs.environment }}
           TAG: ${{ inputs.sha }}
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          APP_URL: ${{ vars.APP_URL }}
-        run: scripts/deploy.sh
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+          STAGING_HOST: ${{ vars.STAGING_DEPLOY_HOST }}
+          PRODUCTION_HOST: ${{ vars.PRODUCTION_DEPLOY_HOST }}
+          STAGING_USER: ${{ vars.STAGING_DEPLOY_USER }}
+          PRODUCTION_USER: ${{ vars.PRODUCTION_DEPLOY_USER }}
+          STAGING_URL: ${{ vars.STAGING_APP_URL }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_APP_URL }}
+          STAGING_KEY: ${{ secrets.STAGING_DEPLOY_SSH_KEY }}
+          PRODUCTION_KEY: ${{ secrets.PRODUCTION_DEPLOY_SSH_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_DEPLOY_KNOWN_HOSTS }}
+          PRODUCTION_KNOWN_HOSTS: ${{ secrets.PRODUCTION_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ "$TARGET" = production ]; then
+            export DEPLOY_HOST="$PRODUCTION_HOST" OTHER_HOST="$STAGING_HOST" DEPLOY_USER="$PRODUCTION_USER" \
+                   APP_URL="$PRODUCTION_URL" DEPLOY_SSH_KEY="$PRODUCTION_KEY" DEPLOY_KNOWN_HOSTS="$PRODUCTION_KNOWN_HOSTS"
+          else
+            export DEPLOY_HOST="$STAGING_HOST" OTHER_HOST="$PRODUCTION_HOST" DEPLOY_USER="$STAGING_USER" \
+                   APP_URL="$STAGING_URL" DEPLOY_SSH_KEY="$STAGING_KEY" DEPLOY_KNOWN_HOSTS="$STAGING_KNOWN_HOSTS"
+          fi
+          unset STAGING_KEY PRODUCTION_KEY STAGING_KNOWN_HOSTS PRODUCTION_KNOWN_HOSTS
+          scripts/deploy.sh

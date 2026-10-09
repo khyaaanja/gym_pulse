@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
+    "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p e2e",
     "worker": "tsx --tsconfig tsconfig.json src/workers/index.ts",
     "test": "vitest run",
     "db:migrate": "prisma migrate deploy",

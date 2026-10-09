@@ -1,7 +1,7 @@
 name: codeql
 
 # Static analysis of our own code. GitHub code scanning is free on public repositories and needs GitHub Advanced
-# Security on private ones, so the job is skipped while the repository is private.
+# Security on private ones, so it only runs once the repository variable CODEQL_ENABLED is set to true.
 on:
   pull_request:
     branches: [main]
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   analyze:
     name: codeql
-    if: ${{ !github.event.repository.private }}
+    if: vars.CODEQL_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

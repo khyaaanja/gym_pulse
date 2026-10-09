@@ -1,25 +1,15 @@
-# Keep secrets, local state and anything the image does not need out of the build context.
-.git
-.github
-.env
-.env.*
-!.env.example
-*.pem
-node_modules
-.next
-.pgdata
-.storage
-.perf-tmp
-.claude
-playwright-report
-test-results
-coverage
-documents
-tests
-e2e
-*.pdf
-*.docx
-*.zip
-*.tsbuildinfo
-Dockerfile
-.dockerignore
+# Allowlist: the build context is only what the image needs. Anything new stays out until added here.
+*
+!package.json
+!package-lock.json
+!prisma.config.ts
+!prisma/
+!src/
+!public/
+!scripts/
+!next.config.ts
+!tsconfig.json
+!postcss.config.mjs
+# Generated locally; the image generates its own during `npm ci`.
+src/generated
+scripts/ci

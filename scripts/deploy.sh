@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
-# Deploys image tag $TAG to one server over SSH. Called by .github/workflows/deploy.yml; never needs to run locally.
+# Deploys one image, by digest, to one server over SSH. Called by .github/workflows/deploy.yml; never needs to run
+# locally.
 #
 # Server side (see documents/GO-LIVE-RUNBOOK.md, Phases 3-4): /srv/gympulse/docker-compose.yml whose web and worker
-# services use `image: ghcr.io/<owner>/<repo>:${TAG}`, an .env.production next to it, and a `deploy` user that can
-# run docker there and has already done `docker login ghcr.io` with a read:packages token.
+# services use `image: ${IMAGE_REF}` (the worker with `healthcheck: {disable: true}`), an .env.production next to it,
+# and a deploy user that can run docker there and has done `docker login ghcr.io` with a read:packages token.
 #
 # Order matters: migrate first in a one-off container. If the migration fails, the running app is left untouched.
 set -euo pipefail
 
-: "${TAG:?}" "${DEPLOY_HOST:?}" "${DEPLOY_SSH_KEY:?}" "${DEPLOY_KNOWN_HOSTS:?}" "${APP_URL:?}"
+: "${TAG:?}" "${IMAGE_REF:?}" "${DEPLOY_HOST:?}" "${DEPLOY_SSH_KEY:?}" "${DEPLOY_KNOWN_HOSTS:?}" "${APP_URL:?}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 
 # Everything below is interpolated into a remote command line, so allow only what a real value can contain.
 [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "TAG must be a full commit SHA" >&2; exit 1; }
+[[ "$IMAGE_REF" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]] || { echo "IMAGE_REF must be ghcr.io/...@sha256:<digest>" >&2; exit 1; }
 [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "DEPLOY_HOST must be a plain hostname or IP" >&2; exit 1; }
 [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "DEPLOY_USER is not a valid user name" >&2; exit 1; }
 [[ "$APP_URL" =~ ^https:// ]] || { echo "APP_URL must be https" >&2; exit 1; }
+# Staging and production must be different machines; a copy-paste mistake here would deploy untested code live.
+if [ -n "${OTHER_HOST:-}" ] && [ "${OTHER_HOST,,}" = "${DEPLOY_HOST,,}" ]; then
+  echo "staging and production point at the same host ($DEPLOY_HOST): refusing" >&2; exit 1
+fi
 
 ssh_dir="$(mktemp -d)"
 trap 'rm -rf "$ssh_dir"' EXIT
@@ -29,20 +35,25 @@ ssh -i "$ssh_dir/key" \
   -o IdentitiesOnly=yes -o BatchMode=yes \
   -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts" \
   -o ConnectTimeout=15 \
-  "$DEPLOY_USER@$DEPLOY_HOST" "TAG=$TAG bash -s" <<'REMOTE'
+  "$DEPLOY_USER@$DEPLOY_HOST" "TAG=$TAG IMAGE_REF=$IMAGE_REF bash -s" <<'REMOTE'
 set -euo pipefail
 cd /srv/gympulse
-export TAG
+export TAG IMAGE_REF
 docker compose pull web worker
 docker compose run --rm --no-deps web npm run db:migrate
 docker compose up -d --remove-orphans web worker
-printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TAG" >> deploy-history.log
+# Prove the containers now running are the requested build, not an old one left behind.
+for svc in web worker; do
+  rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$(docker compose ps -q "$svc")")
+  [ "$rev" = "$TAG" ] || { echo "$svc is running revision '$rev', expected $TAG" >&2; exit 1; }
+done
+printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TAG" "$IMAGE_REF" >> deploy-history.log
 REMOTE
 
 # Smoke test through the public URL (proxy, TLS and app together).
 for _ in $(seq 1 30); do
-  if curl -fsS --max-time 5 "$APP_URL/api/health"; then echo; echo "deployed $TAG"; exit 0; fi
+  if curl -fsS --max-time 5 "$APP_URL/api/health"; then echo; echo "deployed $TAG ($IMAGE_REF)"; exit 0; fi
   sleep 5
 done
-echo "health check failed after deploying $TAG; roll back by running the deploy workflow with the previous SHA" >&2
+echo "health check failed after deploying $TAG; roll back by running the deploy workflow with the previous sha and digest" >&2
 exit 1
