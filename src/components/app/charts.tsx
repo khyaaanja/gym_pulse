@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 /**
  * The app's two charts, drawn as plain SVG. They replaced Recharts, which was ~370 KB of JS whose evaluation alone
@@ -8,8 +8,6 @@ import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode, 
 
 const PAD = { top: 8, right: 8, bottom: 24 } as const;
 const FONT = 12;
-// Rough width of a 12 px label character, for spacing ticks without measuring text.
-const CHAR_W = 6.6;
 
 const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 const compact = (v: number) => (v >= 100000 ? `${+(v / 100000).toFixed(1)}L` : v >= 1000 ? `${+(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : String(v));
@@ -64,29 +62,72 @@ function useWidth() {
   return [ref, w] as const;
 }
 
+let ruler: CanvasRenderingContext2D | null = null;
+/** Rendered width of a label in the chart's font (client only: charts draw nothing until measured). */
+function textWidth(text: string, el: Element) {
+  ruler ??= document.createElement("canvas").getContext("2d");
+  if (!ruler) return text.length * 6.6;
+  ruler.font = `${FONT}px ${getComputedStyle(el).fontFamily}`;
+  return ruler.measureText(text).width;
+}
+
 /**
- * The highlighted point or bar. A mouse clears it on leaving the chart; a finger lifts straight after a tap, so a
- * tapped point stays highlighted until the next tap anywhere outside the chart.
+ * Which axis labels to draw: left to right, each one that clears the last drawn label by `gap` px and stays
+ * inside the chart. Labels that would collide are dropped instead of overlapping.
  */
-function useHover(box: RefObject<HTMLDivElement | null>) {
-  const [hover, setHover] = useState<number | null>(null);
+function thin(labels: string[], at: (i: number) => number, w: number, el: Element, gap: number) {
+  const show = new Set<number>();
+  let edge = -Infinity;
+  labels.forEach((l, i) => {
+    const half = textWidth(l, el) / 2, c = at(i);
+    if (c - half >= edge + gap && c - half >= 0 && c + half <= w) {
+      show.add(i);
+      edge = c + half;
+    }
+  });
+  return show;
+}
+
+/**
+ * The highlighted point or bar, by index; null when nothing is highlighted, or when the data has since shrunk past it
+ * (switching range keeps the chart mounted). A mouse clears it on leaving the chart, a scroll that began on the chart
+ * cancels it, and a finger tap leaves it up until the next tap outside the chart. Arrow keys move it while focused.
+ */
+function useHover(box: RefObject<HTMLDivElement | null>, count: number) {
+  const [raw, setHover] = useState<number | null>(null);
+  const hover = raw !== null && raw < count ? raw : null;
   useEffect(() => {
-    if (hover === null) return;
+    if (raw === null) return;
     const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) setHover(null); };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
-  }, [hover, box]);
-  const leave = (e: PointerEvent) => { if (e.pointerType !== "touch") setHover(null); };
-  return [hover, setHover, leave] as const;
+  }, [raw, box]);
+  const step = (e: KeyboardEvent) => {
+    const to = { ArrowRight: (hover ?? -1) + 1, ArrowLeft: (hover ?? count) - 1, Home: 0, End: count - 1 }[e.key];
+    if (to !== undefined) { e.preventDefault(); setHover(Math.min(count - 1, Math.max(0, to))); }
+    else if (e.key === "Escape") setHover(null);
+  };
+  const events = {
+    onPointerLeave: (e: PointerEvent) => { if (e.pointerType !== "touch") setHover(null); },
+    onPointerCancel: () => setHover(null),
+    onKeyDown: step,
+    onBlur: () => setHover(null),
+  };
+  return [hover, setHover, events] as const;
 }
 
+/** Right of the point when it fits, else left of it, and never past either edge of the chart. */
 function Tip({ x, y, w, title, children }: { x: number; y: number; w: number; title: string; children: ReactNode }) {
-  // Sits right of the pointer, or left of it near the right edge, like the old tooltip.
-  const right = x > w - 150;
+  const ref = useRef<HTMLDivElement>(null);
+  const [tw, setTw] = useState(0);
+  useLayoutEffect(() => setTw(ref.current?.offsetWidth ?? 0), [title, children]);
+  const left = x + 12 + tw <= w ? x + 12 : x - 12 - tw >= 0 ? x - 12 - tw : Math.max(0, w - tw);
   return (
     <div
+      ref={ref}
+      aria-hidden
       className="pointer-events-none absolute z-10 whitespace-nowrap rounded-xl bg-surface px-3 py-2 text-sm shadow-card ring-1 ring-line"
-      style={{ left: x, top: y, transform: `translate(${right ? "calc(-100% - 12px)" : "12px"}, -50%)` }}
+      style={{ left, top: y, transform: "translateY(-50%)", visibility: tw ? "visible" : "hidden" }}
     >
       <p className="text-xs text-ink-3">{title}</p>
       <p className="num font-semibold text-ink">{children}</p>
@@ -94,10 +135,26 @@ function Tip({ x, y, w, title, children }: { x: number; y: number; w: number; ti
   );
 }
 
-function Frame({ height, label, box, children }: { height: number; label: string; box: RefObject<HTMLDivElement | null>; children: ReactNode }) {
+type Events = ReturnType<typeof useHover>[2];
+
+/**
+ * The chart's box. The drawing is one focusable image (name = the whole series); the highlighted value is also
+ * announced through a polite live region, so arrow-key users hear what a mouse user reads in the tooltip.
+ */
+function Frame({ height, label, box, events, live, children }: { height: number; label: string; box: RefObject<HTMLDivElement | null>; events?: Events; live?: string; children?: ReactNode }) {
   return (
-    <div ref={box} className="relative select-none" style={{ height, touchAction: "pan-y" }} role="img" aria-label={label}>
-      {children}
+    <div ref={box} className="relative select-none" style={{ height }}>
+      <div
+        role="img"
+        aria-label={label}
+        tabIndex={events ? 0 : undefined}
+        className="h-full rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        style={{ touchAction: "pan-y pinch-zoom" }}
+        {...events}
+      >
+        {children}
+      </div>
+      <p className="sr-only" aria-live="polite">{live ?? ""}</p>
     </div>
   );
 }
@@ -111,14 +168,14 @@ function YAxis({ ticks: ts, y, left, w, format }: { ticks: number[]; y: (v: numb
   ));
 }
 
-/** Single series: daily check-ins. No legend (the title names it); crosshair tooltip on hover or touch. */
+/** Single series: daily check-ins. No legend (the title names it); crosshair tooltip on hover, touch or arrow keys. */
 export function AttendanceChart({ data, height = 220 }: { data: { date: string; visits: number }[]; height?: number }) {
   const [box, w] = useWidth();
-  const [hover, setHover, leave] = useHover(box);
+  const [hover, setHover, events] = useHover(box, data.length);
   // useId's punctuation isn't safe inside url(#…).
   const fill = `att${useId().replace(/[^\w-]/g, "")}`;
   const label = `Daily check-ins, ${data.length} days`;
-  if (!w || data.length === 0) return <Frame box={box} height={height} label={label}>{null}</Frame>;
+  if (!w || data.length === 0) return <Frame box={box} height={height} label={label} />;
 
   const left = 36;
   const ts = ticks(Math.max(0, ...data.map((d) => d.visits)));
@@ -129,20 +186,20 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
   const pts = data.map((d, i) => [x(i), y(d.visits)] as [number, number]);
   const line = monotone(pts);
   const area = `${line}L${pts.at(-1)![0]},${y(0)}L${pts[0]![0]},${y(0)}Z`;
-  // Label every k-th day so labels keep a gap between them.
-  const per = data.length > 1 ? plotW / (data.length - 1) : plotW;
-  const every = Math.max(1, Math.ceil((CHAR_W * 7 + 28) / per));
+  const days = data.map((d) => dayLabel(d.date));
+  const shown = thin(days, x, w, box.current!, 20);
 
   const pick = (e: PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
     const i = Math.round(((e.clientX - r.left - left) / plotW) * (data.length - 1));
     setHover(Math.min(data.length - 1, Math.max(0, i)));
   };
-  const h = hover !== null ? data[hover] : null;
+  const h = hover !== null ? data[hover]! : null;
+  const value = h ? `${h.visits.toLocaleString("en-IN")} check-ins` : "";
 
   return (
-    <Frame box={box} height={height} label={label}>
-      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick} onPointerLeave={leave}>
+    <Frame box={box} height={height} label={label} events={events} live={h ? `${dayLabel(h.date)}: ${value}` : ""}>
+      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick}>
         <defs>
           <linearGradient id={fill} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.22} />
@@ -150,8 +207,8 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
           </linearGradient>
         </defs>
         <YAxis ticks={ts} y={y} left={left} w={w} format={String} />
-        {data.map((d, i) => (i % every === 0 ? (
-          <text key={d.date} x={x(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{dayLabel(d.date)}</text>
+        {data.map((d, i) => (shown.has(i) ? (
+          <text key={d.date} x={x(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{days[i]}</text>
         ) : null))}
         <path d={area} fill={`url(#${fill})`} />
         <path d={line} fill="none" stroke="var(--brand)" strokeWidth={2} />
@@ -162,7 +219,7 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
           </>
         )}
       </svg>
-      {h && <Tip x={x(hover!)} y={pts[hover!]![1]} w={w} title={dayLabel(h.date)}>{h.visits.toLocaleString("en-IN")} check-ins</Tip>}
+      {h && <Tip x={x(hover!)} y={pts[hover!]![1]} w={w} title={dayLabel(h.date)}>{value}</Tip>}
     </Frame>
   );
 }
@@ -170,9 +227,9 @@ export function AttendanceChart({ data, height = 220 }: { data: { date: string; 
 /** Single-hue bars for magnitude (e.g. revenue by stream). Labels are the categories; values in the tooltip. */
 export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: string; value: number }[]; unit: string; height?: number }) {
   const [box, w] = useWidth();
-  const [hover, setHover, leave] = useHover(box);
+  const [hover, setHover, events] = useHover(box, data.length);
   const label = data.map((d) => `${d.label}: ${d.value}`).join(", ");
-  if (!w || data.length === 0) return <Frame box={box} height={height} label={label}>{null}</Frame>;
+  if (!w || data.length === 0) return <Frame box={box} height={height} label={label} />;
 
   const left = 44;
   const ts = ticks(Math.max(0, ...data.map((d) => d.value)));
@@ -183,21 +240,20 @@ export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: str
   const barW = Math.min(48, Math.max(1, band - gap * 2));
   const y = (v: number) => PAD.top + plotH - (v / top) * plotH;
   const cx = (i: number) => left + band * i + band / 2;
-  // Category labels that don't fit their band are thinned out rather than overlapped.
-  const widest = Math.max(...data.map((d) => d.label.length)) * CHAR_W + 8;
-  const every = Math.max(1, Math.ceil(widest / band));
+  const shown = thin(data.map((d) => d.label), cx, w, box.current!, 8);
 
   const pick = (e: PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
     const i = Math.floor((e.clientX - r.left - left) / band);
     setHover(i >= 0 && i < data.length ? i : null);
   };
-  const h = hover !== null ? data[hover] : null;
+  const h = hover !== null ? data[hover]! : null;
+  const value = h ? `${h.value.toLocaleString("en-IN")} ${unit}` : "";
   const r = Math.min(4, barW / 2);
 
   return (
-    <Frame box={box} height={height} label={label}>
-      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick} onPointerLeave={leave}>
+    <Frame box={box} height={height} label={label} events={events} live={h ? `${h.label}: ${value}` : ""}>
+      <svg width={w} height={height} className="block overflow-visible" onPointerMove={pick} onPointerDown={pick}>
         {hover !== null && <rect x={left + band * hover} y={PAD.top} width={band} height={plotH} fill="var(--surface-2)" />}
         <YAxis ticks={ts} y={y} left={left} w={w} format={compact} />
         {data.map((d, i) => {
@@ -211,12 +267,12 @@ export function MagnitudeBars({ data, unit, height = 220 }: { data: { label: str
                   fill="var(--brand)"
                 />
               )}
-              {i % every === 0 && <text x={cx(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{d.label}</text>}
+              {shown.has(i) && <text x={cx(i)} y={height - 6} textAnchor="middle" fontSize={FONT} fill="var(--ink-3)">{d.label}</text>}
             </g>
           );
         })}
       </svg>
-      {h && <Tip x={cx(hover!)} y={PAD.top + plotH / 2} w={w} title={h.label}>{h.value.toLocaleString("en-IN")} {unit}</Tip>}
+      {h && <Tip x={cx(hover!)} y={PAD.top + plotH / 2} w={w} title={h.label}>{value}</Tip>}
     </Frame>
   );
 }
