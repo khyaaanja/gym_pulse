@@ -10,7 +10,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Metric } from "@/components/ui/metric";
 import { Button } from "@/components/ui/button";
 import { EstimateNote, PageHeader } from "@/components/ui/misc";
-import { AttendanceChart, MagnitudeBars } from "./charts-lazy";
+import { AttendanceChart, MagnitudeBars } from "./charts";
 import { StatusBar } from "./status-bar";
 import { RangeTabs } from "./range-tabs";
 

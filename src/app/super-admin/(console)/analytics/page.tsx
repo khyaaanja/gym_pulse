@@ -4,7 +4,7 @@ import { formatMoney } from "@/lib/money";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/misc";
 import { Table, Td, Th } from "@/components/ui/table";
-import { MagnitudeBars, AttendanceChart } from "@/components/app/charts-lazy";
+import { MagnitudeBars, AttendanceChart } from "@/components/app/charts";
 
 export default async function Analytics() {
   await requireAdmin("analytics.view");

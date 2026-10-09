@@ -7,7 +7,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Metric } from "@/components/ui/metric";
 import { PageHeader, EstimateNote } from "@/components/ui/misc";
 import { RangeTabs } from "@/components/app/range-tabs";
-import { MagnitudeBars } from "@/components/app/charts-lazy";
+import { MagnitudeBars } from "@/components/app/charts";
 
 export default async function Overview({ searchParams }: PageProps<"/super-admin">) {
   await requireAdmin("analytics.view");
