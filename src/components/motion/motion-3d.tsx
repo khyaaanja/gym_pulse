@@ -63,7 +63,9 @@ export function Motion3D() {
       // its mutations would re-run the scan every 120 ms, and nothing it finds can flip before the entrance is over.
       scan(true);
     };
-    ready = window.setTimeout(settle, 1600);
+    // First look after 800 ms: settle() itself waits out a busy skeleton or a running entrance, so this only needs to
+    // clear hydration, and a shorter wait lets the row flips start sooner on slow phones.
+    ready = window.setTimeout(settle, 800);
 
     let active: HTMLElement | null = null;
     let frame = 0;
