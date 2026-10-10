@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type * as T from "three";
 import { LIFTER_URL, LIFTS, LIFT_ORDER, NODES, BODY, MAX_REP_RATE, SET_REPS, planPath, pathAt, poseOf, poseOfKey, repAt, repPlan, repPose, route, setOpening, solve, sway, type Lift, type Path, type Pose, type RepPlan, type RepState, type V3 } from "./gym-rig";
 
@@ -20,10 +20,11 @@ import { LIFTER_URL, LIFTS, LIFT_ORDER, NODES, BODY, MAX_REP_RATE, SET_REPS, pla
  * thread is free), compiles its shaders off the critical path, then crossfades in over the loop.
  *
  * Deliberately careful: three.js loads only on the client and only once the page is idle, the loop pauses when
- * hidden or off screen, quality steps down on its own if frames run long, and reduced-motion users get still frames.
+ * hidden or off screen, and quality steps down on its own if frames run long. It runs on every device, phones and
+ * reduced-motion settings included.
  * Machines without a real GPU (software GL, where every frame and every shader compile runs on the CPU and would
- * freeze the page) and machines without WebGL never load three.js at all: they get pre-rendered posters of the same
- * shots (public/gym, made by scripts/render-gym-posters.mjs), crossfading as you scroll.
+ * freeze the page) and machines without WebGL never load three.js at all: they get the poster film, pre-rendered loops
+ * of the same shots (public/gym, made by scripts/render-gym-loop.mjs), crossfading as you scroll.
  */
 
 export type GymShot = "hero" | "mirror" | "profile" | "overhead" | "low" | "close" | "wide" | "orbit";
@@ -77,6 +78,7 @@ const noop = () => () => {};
 
 /** Runs the stage in `el`: posters where the film can't run well, the live film everywhere else. Returns its cleanup. */
 function start(el: HTMLDivElement, mode: "page" | "panel", setPhase: (p: Phase) => void): () => void {
+  if (mode === "page") void av1Smooth(); // the chapter loops' codec, answered before any of them is wanted
   // A loop that didn't autoplay from the HTML (a panel that might have been hidden) starts now the stage has a box.
   playLoop(el);
   let rest = 0;
@@ -182,27 +184,80 @@ function OpeningPoster({ mode, priority }: { mode: "page" | "panel"; priority: b
 }
 
 /**
+ * Some WebKit builds stall at a loop's wrap instead of looping: still "playing", but the time sits at the end (or at the
+ * start, in a storm of seeks that never lands), and the lifter freezes mid-rep. Seeking back doesn't recover them;
+ * reloading does (a loop's first frame is its poster's, so nothing jumps). But their media loader skips the HTTP cache
+ * on load() and would fetch the whole file again every rep, so the first stall copies the file into memory once (one
+ * more download) and every reload after that plays from the copy, with no network. Only a loop that has already played
+ * through its start can stall this way, so a first load still buffering is never mistaken for one; where looping works
+ * none of this runs. `unstick` goes back to the <source> list (and releases the copy); `stop` ends the watch.
+ */
+function recoverLoop(get: () => HTMLVideoElement | null, wanted: () => boolean = () => true) {
+  let last = -1, played = false, failed = 0, copying = false;
+  let copy: string | null = null;
+  const unstick = () => {
+    if (!copy) return;
+    // On unmount React has already cleared the ref: the copy is still released.
+    get()?.removeAttribute("src");
+    URL.revokeObjectURL(copy);
+    copy = null;
+  };
+  const restart = (v: HTMLVideoElement) => {
+    played = false; // it must play through its start again before a stall can count
+    v.load(); // also pauses it: it plays again only if it is still wanted
+    if (wanted()) v.play().catch(() => undefined);
+  };
+  const watch = window.setInterval(() => {
+    const v = get();
+    if (!v || !v.loop || v.paused || !wanted() || document.hidden || copying) { last = -1; return; }
+    const t = v.currentTime;
+    if (t > 0.5) played = true;
+    // Held at the wrap for a whole look: a storm of seeks can jitter it a few hundredths, a real wrap jumps a rep.
+    const atWrap = t < 0.2 || (v.duration > 0 && t >= v.duration - 0.1);
+    if (!played || last < 0 || Math.abs(t - last) > 0.15 || !atWrap) { last = t; return; }
+    last = -1;
+    if (copy) return restart(v);
+    copying = true;
+    const from = v.currentSrc;
+    fetch(from)
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+      .then((blob) => {
+        // Still the same video, and still wanted (not turned, unmounted, or paused meanwhile).
+        if (get() !== v || v.currentSrc !== from || v.paused || !wanted()) return;
+        copy = URL.createObjectURL(blob);
+        v.src = copy; // an src attribute takes over from the <source> list
+        restart(v);
+      })
+      // No copy: a plain reload (one more download). After three failures, no more fetches or reloads, and looping
+      // goes off: left on, a stalled WebKit loop re-requests the file every rep by itself.
+      .catch(() => {
+        if (get() !== v) return; // gone meanwhile: nothing to restart
+        if (++failed <= 2) restart(v);
+        else v.loop = false;
+      })
+      .finally(() => { copying = false; });
+  }, 400);
+  return {
+    unstick,
+    stop: () => {
+      window.clearInterval(watch);
+      unstick();
+    },
+  };
+}
+
+/**
  * The opening shot, moving: one rep on a seamless loop, painted over the opening poster as soon as its first frame
  * decodes (that frame is the poster, so the handoff doesn't jump). No script: `autoPlay` + `muted` play it from the
- * HTML. Reduced motion matches no source, so nothing downloads and the poster stays. VP9 first (~160 KB, the smaller
- * file); H.264 for browsers without VP9 (older Safari).
+ * HTML, on every device, reduced-motion settings included. H.264 only: every browser plays it in hardware, and it is
+ * the first motion, so it must be one download. (AV1, sharper at the same bytes, is decided by script: listed first in
+ * this HTML, a phone that decodes it in software would fetch it, then switch and fetch the H.264 too.)
  * `autoPlay` is off for a panel that may sit in a hidden column: the stage plays it once it has a box (start()).
  */
 function OpeningLoop({ mode, autoPlay }: { mode: "page" | "panel"; autoPlay: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    // Stall recovery (see below).
-    let last = -1;
-    let failed = 0;
-    let copy: string | null = null;
-    let copying = false;
-    const unstick = () => {
-      if (!copy) return;
-      // On unmount React has already cleared the ref: the copy is still released.
-      ref.current?.removeAttribute("src");
-      URL.revokeObjectURL(copy);
-      copy = null;
-    };
+    const stall = recoverLoop(() => ref.current);
     // A video picks its <source> once: on a turn between portrait and landscape, pick again (the poster under it
     // switches by itself), and carry on playing only if it was.
     const mq = window.matchMedia(PORTRAIT);
@@ -211,59 +266,19 @@ function OpeningLoop({ mode, autoPlay }: { mode: "page" | "panel"; autoPlay: boo
       // Under the live film the loop is hidden for good: fetching the other shape would be wasted bytes.
       if (!v || v.parentElement?.hasAttribute("data-gym-live")) return;
       const playing = !v.paused;
-      unstick(); // back to the <source> list, so the new shape is picked
+      stall.unstick(); // back to the <source> list, so the new shape is picked
       v.load();
       if (playing) v.play().catch(() => undefined);
       else v.pause(); // also cancels `autoplay`, so a loop hidden under the film stays stopped
     };
     onChange(mq, repick);
-    // Some WebKit builds stall at the loop point instead of wrapping: still "playing", but the time sits at the end
-    // and the lifter freezes mid-rep. Seeking back doesn't recover them; reloading does (its first frame is the
-    // poster's, so nothing jumps). But their media loader skips the HTTP cache on load() and would fetch the whole
-    // file again every rep, so the first stall copies the file into memory once (one more download) and every
-    // reload after that plays from the copy, with no network. Where looping works none of this runs: the time never
-    // holds at the end for a whole look.
-    const restart = (v: HTMLVideoElement) => {
-      v.load();
-      v.play().catch(() => undefined);
-    };
-    const watch = window.setInterval(() => {
-      const v = ref.current;
-      if (!v || !v.loop || v.paused || v.seeking || document.hidden || copying) { last = -1; return; }
-      if (v.currentTime === last && v.duration > 0 && v.currentTime >= v.duration - 0.1) {
-        last = -1;
-        if (copy) return restart(v);
-        copying = true;
-        const from = v.currentSrc;
-        fetch(from)
-          .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
-          .then((blob) => {
-            // Still the same video, and still wanted (not turned, unmounted, or paused meanwhile).
-            if (ref.current !== v || v.currentSrc !== from || v.paused) return;
-            copy = URL.createObjectURL(blob);
-            v.src = copy; // an src attribute takes over from the <source> list
-            restart(v);
-          })
-          // No copy: a plain reload (one more download). After three failures, no more fetches or reloads, and looping
-          // goes off: left on, a stalled WebKit loop re-requests the file every rep by itself.
-          .catch(() => {
-            if (ref.current !== v) return; // gone meanwhile: nothing to restart
-            if (++failed <= 2) restart(v);
-            else v.loop = false;
-          })
-          .finally(() => { copying = false; });
-        return;
-      }
-      last = v.currentTime;
-    }, 400);
     return () => {
       offChange(mq, repick);
-      window.clearInterval(watch);
-      unstick();
+      stall.stop();
     };
   }, []);
   // Panels are card-sized: their copies are smaller (as their posters are).
-  const src = (shape: "portrait" | "landscape", ext: "mp4" | "webm") => `/gym/${OPENING}-loop-${shape}${mode === "panel" ? "-panel" : ""}.${ext}`;
+  const src = (shape: "portrait" | "landscape") => `/gym/${OPENING}-loop-${shape}${mode === "panel" ? "-panel" : ""}.mp4`;
   return (
     <video
       ref={ref}
@@ -278,27 +293,36 @@ function OpeningLoop({ mode, autoPlay }: { mode: "page" | "panel"; autoPlay: boo
       aria-hidden
       tabIndex={-1}
     >
-      <source media={`${MOTION} and ${PORTRAIT}`} src={src("portrait", "webm")} type={WEBM} />
-      <source media={`${MOTION} and ${PORTRAIT}`} src={src("portrait", "mp4")} type={MP4} />
-      <source media={MOTION} src={src("landscape", "webm")} type={WEBM} />
-      <source media={MOTION} src={src("landscape", "mp4")} type={MP4} />
+      <source media={PORTRAIT} src={src("portrait")} type={MP4} />
+      <source src={src("landscape")} type={MP4} />
     </video>
   );
 }
-const MOTION = "(prefers-reduced-motion: no-preference)";
 /** The loop's length: one rep of the deadlift (105 frames at 30 fps). */
 const LOOP_SECONDS = 3.5;
 /** The live film's starting pixel budget (CSS px x dpr², ~1080p at 1x) where its GPU can't be timed: see sizing in mount. */
 const PX_BUDGET = 2.1e6;
 /** The GPU time one frame of the live film is sized to (see calibration in mount): room left for the page's own. */
 const FRAME_MS = 12;
+/** The loops' encodings (scripts/render-gym-loop.mjs): AV1 at 2x for the chapter loops where it decodes smoothly in
+ *  hardware (av1Smooth), sharper and no bigger; H.264 at 1.5x everywhere else, and for the opening. */
+const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
 const MP4 = 'video/mp4; codecs="avc1.640028"';
-const WEBM = 'video/webm; codecs="vp9"';
-const loopOf = (el: HTMLElement) => el.querySelector<HTMLVideoElement>("video.gym-loop");
-/** Whether the stage still wants its opening loop playing: on the page, not under the live film or a chapter still,
- *  and motion not turned off meanwhile (the <source> was picked at load, so the loop would still play). */
-const loopWanted = (el: HTMLElement) =>
-  el.isConnected && !el.hasAttribute("data-gym-live") && !el.hasAttribute("data-gym-posters") && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** AV1 only where it plays smoothly in hardware: Chrome lists it as playable everywhere, and a phone without an AV1
+ *  decoder would decode the 2x loops in software, dropping frames and spending battery, where its H.264 is free.
+ *  Asked once; until the answer (milliseconds) the <source> order stands. */
+let av1Known: boolean | null = null;
+let av1Asked: Promise<boolean> | null = null;
+const av1Smooth = () =>
+  (av1Asked ??= Promise.race([
+    // No answer, an error or no API at all: H.264, which plays everywhere. Never more than 300 ms of waiting.
+    navigator.mediaCapabilities?.decodingInfo({ type: "file", video: { contentType: AV1, width: 780, height: 1688, bitrate: 300_000, framerate: 30 } })
+      .then((r) => r.supported && r.smooth && r.powerEfficient, () => false) ?? false,
+    new Promise<boolean>((r) => setTimeout(() => r(false), 300)),
+  ]).then((ok) => (av1Known = ok)));
+const loopOf = (el: HTMLElement) => el.querySelector<HTMLVideoElement>("video.gym-opening");
+/** Whether the stage still wants its opening loop playing: on the page, and not under the live film or a chapter still. */
+const loopWanted = (el: HTMLElement) => el.isConnected && !el.hasAttribute("data-gym-live") && !el.hasAttribute("data-gym-posters");
 /** Events that can count as a user gesture for media playback. A touch that only scrolled fires touchend but isn't
  *  one, so a refused retry keeps listening. */
 const GESTURES = ["touchend", "pointerup", "click", "keydown"] as const;
@@ -331,10 +355,10 @@ function retryOnGesture(el: HTMLElement) {
   };
   GESTURES.forEach((g) => window.addEventListener(g, retry, { capture: true, passive: true, signal: ac.signal }));
 }
-/** Play or pause the stage's opening loop. A loop with no source (reduced motion) just rejects: nothing to do. */
+/** Play the stage's opening loop, retrying on the reader's next gesture where the browser refuses autoplay. */
 const playLoop = (el: HTMLElement) => {
   const v = loopOf(el);
-  if (!v?.paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!v?.paused) return;
   v.play().catch((e: unknown) => {
     if (e instanceof DOMException && e.name === "NotAllowedError" && loopWanted(el)) retryOnGesture(el);
   });
@@ -413,13 +437,18 @@ function gpuKeepsUp(): boolean {
     // One warm-up pass (the compile lands here, and compile speed says nothing about fill), then the timed passes.
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    const t0 = performance.now();
-    for (let i = 1; i <= 8; i++) {
-      gl.uniform1f(u, i);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // Best of two: a phone busy for a moment (decoding the opening loop, a GC) can blow one run on its own, and a
+    // software rasteriser is just as slow both times.
+    let ms = Infinity;
+    for (let run = 0; run < 2 && ms >= 25; run++) {
+      const t0 = performance.now();
+      for (let i = 1; i <= 8; i++) {
+        gl.uniform1f(u, i);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // waits for the passes to finish
+      ms = Math.min(ms, performance.now() - t0);
     }
-    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // waits for the passes to finish
-    const ms = performance.now() - t0;
     gl.getExtension("WEBGL_lose_context")?.loseContext();
     return ms < 25;
   } catch {
@@ -428,7 +457,7 @@ function gpuKeepsUp(): boolean {
 }
 
 /**
- * The film as stills: each chapter's shot at the lockout, crossfading as the reader moves between chapters, with a
+ * The film as stills: each chapter's shot (its loop's first frame), crossfading as the reader moves between chapters, with a
  * slow drift (a compositor-only transform, no CPU) so the frame is never dead. Only the current and neighbouring
  * posters are fetched. The opening shot has no still of its own: the opening loop (moving) shows through for it.
  * The set card still names the lift, driven by the same chapter logic as the live film.
@@ -505,28 +534,148 @@ function Posters({ host, bridge }: { host: React.RefObject<HTMLDivElement | null
     const t = window.setTimeout(() => {
       el.setAttribute("data-gym-posters", "");
       pauseLoop(el);
-    }, 700);
+    }, 500); // the poster's duration-400 fade, and a frame or two
     return () => clearTimeout(t);
   }, [opening, ready, host]);
   return (
     <>
       {ids.map((id, j) =>
         // The current chapter's still and its neighbours, ready to cross to; except a bridge at the opening (the usual
-        // first load, with the live film about to take over), which fetches nothing.
+        // first load, with the live film about to take over), which fetches nothing. Each has its loop over it: only
+        // the current one's plays (and downloads); the one just left keeps playing as it fades out, so it never pops
+        // back to its still mid-rep.
         Math.abs(j - at) > (bridge && at === 0 ? 0 : 1) || id === OPENING ? null : (
-          // eslint-disable-next-line @next/next/no-img-element -- a fixed backdrop crossfade; next/image adds nothing here
-          <img
-            key={keyOf(j)}
-            src={`/gym/${id}-${suffix}.webp`}
-            alt=""
-            decoding="async"
-            fetchPriority={j === at ? "high" : "low"}
-            onLoad={() => setLoaded((prev) => (prev.has(keyOf(j)) ? prev : new Set(prev).add(keyOf(j))))}
-            className={`gym-poster absolute inset-0 size-full object-cover transition-opacity duration-700 ${j === at ? "opacity-100" : "opacity-0"}`}
-          />
+          <Fragment key={keyOf(j)}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a fixed backdrop crossfade; next/image adds nothing here */}
+            <img
+              src={`/gym/${id}-${suffix}.webp`}
+              alt=""
+              decoding="async"
+              fetchPriority={j === at ? "high" : "low"}
+              onLoad={() => setLoaded((prev) => (prev.has(keyOf(j)) ? prev : new Set(prev).add(keyOf(j))))}
+              className={`gym-poster absolute inset-0 size-full object-cover transition-opacity duration-400 ${j === at ? "opacity-100" : "opacity-0"}`}
+            />
+            <ChapterLoop id={id} suffix={suffix} active={j === at} />
+          </Fragment>
         ),
       )}
     </>
+  );
+}
+
+/** The still's or the loop's slow drift (globals.css). Not getAnimations()[0]: mid-crossfade that is the opacity fade. */
+const driftOf = (e: Element) => e.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === "poster-drift");
+/** Set once the browser refuses a loop's autoplay (iOS Low Power Mode, some battery savers). Such a browser unlocks each
+ *  video only by its own play() inside a gesture (and a touch that scrolled isn't one): from then on every chapter loop
+ *  on hand asks for the reader's next tap, the neighbours included, so the next chapter is ready when it comes. */
+let autoplayRefused = false;
+/** Loops already on hand when the refusal comes: they start listening for the tap then, not only those mounted after. */
+const onRefused = new Set<() => void>();
+const refuseAutoplay = () => {
+  if (autoplayRefused) return;
+  autoplayRefused = true;
+  onRefused.forEach((f) => f());
+};
+
+/**
+ * A chapter's still, moving: one rep of its lift on a seamless loop (scripts/render-gym-loop.mjs), whose first
+ * frame is the still. It plays and fades in over the still while its chapter is current; when the reader moves on, it
+ * fades out still playing, then pauses. Nothing downloads until it is first current (or unlocked by a gesture).
+ */
+function ChapterLoop({ id, suffix, active }: { id: string; suffix: string; active: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [shown, setShown] = useState(false);
+  // Its sources wait for the AV1 answer (see av1Smooth; asked as the stage starts, so it is in by now): listed before
+  // it, a phone would pick AV1, fetch it, then switch and fetch the H.264 too.
+  const [av1, setAv1] = useState(av1Known);
+  const activeRef = useRef(active);
+  const unlock = useRef<() => void>(() => {});
+
+  // Mount: the gesture unlock and the WebKit stall watchdog.
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const ac = new AbortController();
+    let listening = false, unlocked = false, trying = false;
+    const attempt = () => {
+      if (unlocked || trying) return;
+      trying = true;
+      // Inside the gesture handler, while the gesture still counts.
+      v.play()
+        .then(() => {
+          unlocked = true;
+          ac.abort();
+          if (!activeRef.current) v.pause();
+        })
+        .catch(() => undefined) // still refused (that touch was a scroll): keep listening
+        .finally(() => { trying = false; });
+    };
+    unlock.current = () => {
+      if (listening || unlocked) return;
+      listening = true;
+      GESTURES.forEach((g) => window.addEventListener(g, attempt, { capture: true, passive: true, signal: ac.signal }));
+    };
+    const listen = () => unlock.current();
+    if (autoplayRefused) listen();
+    else onRefused.add(listen);
+    const stall = recoverLoop(() => v, () => activeRef.current); // one fading out is about to pause: never restarted
+    void av1Smooth().then(setAv1); // also when the answer came between render and now: state may still be null
+    return () => {
+      onRefused.delete(listen);
+      ac.abort();
+      stall.stop();
+    };
+  }, []);
+
+  // Current: play (it fades in once it does). Left: fade out while still playing, then pause.
+  useEffect(() => {
+    activeRef.current = active;
+    const v = ref.current;
+    if (!v || av1 === null) return; // no sources yet
+    if (active) {
+      v.preload = "auto";
+      // Sources that arrived after it was created (the AV1 answer came late) are only picked up by a fresh load.
+      if (v.networkState === v.NETWORK_EMPTY || v.networkState === v.NETWORK_NO_SOURCE) v.load();
+      v.play().catch((e: unknown) => {
+        if (!(e instanceof DOMException && e.name === "NotAllowedError")) return;
+        refuseAutoplay(); // this loop included
+      });
+      return;
+    }
+    // Faded out by `active` alone; once out of sight it pauses, and waits for its next play to be shown again. It resumes
+    // where it paused, mid-rep, under a crossfade: seeking it back to its first frame stalled WebKit (GStreamer) in a
+    // seek loop, the video never playing again.
+    const t = window.setTimeout(() => {
+      v.pause();
+      setShown(false);
+    }, 500); // the 400 ms fade, and a frame or two
+    return () => clearTimeout(t);
+  }, [active, av1]);
+
+  return (
+    <video
+      ref={ref}
+      className={`gym-loop gym-poster absolute inset-0 size-full object-cover transition-opacity duration-400 ${active && shown ? "opacity-100" : "opacity-0"}`}
+      muted
+      loop
+      playsInline
+      preload="none"
+      disablePictureInPicture
+      disableRemotePlayback
+      aria-hidden
+      tabIndex={-1}
+      onPlaying={(e) => {
+        if (!activeRef.current) return; // a neighbour unlocked by a tap, or one fading out
+        // In step with its still's drift, so the crossfade doesn't shift the frame.
+        const still = e.currentTarget.previousElementSibling;
+        const from = still && driftOf(still), to = driftOf(e.currentTarget);
+        if (from && to) to.currentTime = from.currentTime;
+        setShown(true);
+      }}
+    >
+      {av1 && <source src={`/gym/${id}-loop-${suffix}-av1.mp4`} type={AV1} />}
+      {av1 !== null && <source src={`/gym/${id}-loop-${suffix}.mp4`} type={MP4} />}
+    </video>
   );
 }
 
@@ -645,11 +794,14 @@ const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => set
 async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "panel"; family: string; gltf: import("three/examples/jsm/loaders/GLTFLoader.js").GLTF | null; gone: () => boolean; onLive: () => void; onSlow: () => void }): Promise<() => void> {
   const [THREE, { RoundedBoxGeometry }, { EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { ShaderPass }, { RoomEnvironment }, , { buildWorld }, { buildLifter }, { buildAthlete }] = mods;
   const page = opts.mode === "page";
-  const prefersStill = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const small = Math.min(window.innerWidth, window.innerHeight) < 700 || window.matchMedia("(pointer: coarse)").matches;
   const Q = {
     // Panels are small card backdrops: they never need more than 1 CSS px per pixel.
-    dpr: Math.min(window.devicePixelRatio || 1, small ? 1.4 : page ? 1.75 : 1),
+    // Phones up to 2x (a 3x screen then upscales by 1.5 at most): calibration, or the screen test where the GPU can't be
+    // timed (Safari), sizes it down before it shows on a GPU that can't fill that.
+    // Bumped DPR floor on mobile to keep character animation sharp — 3x screens get full ratio,
+    // 2x screens keep 2 but won't downsample as aggressively.
+    dpr: Math.min(window.devicePixelRatio || 1, small ? 3 : page ? 1.75 : 1),
     shadow: small || !page ? 1024 : 2048,
     seg: small ? 14 : 20,
     dust: small ? 380 : 900,
@@ -662,7 +814,6 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     opts.onSlow(); // no context after all: the poster film
     return () => {};
   }
-  const reduced = prefersStill;
   renderer.setPixelRatio(Q.dpr);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -677,7 +828,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   // (0.001: no pixel changes by it): at 0 the compositor leaves the canvas out, so its first frame on screen, and the
   // cost of compositing it every frame, both landed at the crossfade (a ~150-250 ms hitch there on an integrated GPU),
   // and the screen test before it (judge) timed frames that weren't paying for it.
-  canvas.style.cssText = "position:absolute;inset:0;display:block;width:100%;height:100%;opacity:0.001;transition:opacity 0.6s ease";
+  canvas.style.cssText = "position:absolute;inset:0;display:block;width:100%;height:100%;opacity:0.001;transition:opacity 0.35s ease";
   el.appendChild(canvas);
 
   const scene = new THREE.Scene();
@@ -822,7 +973,11 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   // ─── post: bloom for the neon and hot highlights, then a film pass (grain, vignette, lens fringe) ───
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.55, 1.25);
+  // Bloom strength adjusted per device: full on desktop, toned down on mobile to keep things sharp
+  const bloomStrength = small ? 0.35 : 0.6;
+  const bloomThresh = small ? 0.4 : 0.55;
+  const bloomRadius = small ? 0.4 : 0.55;
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), bloomStrength, bloomThresh, bloomRadius);
   composer.addPass(bloom);
   const output = new OutputPass();
   composer.addPass(output);
@@ -872,8 +1027,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   // Where calibration runs, the film starts at its floor, the size an integrated GPU settles on anyway: calibration then
   // only ever grows it, on a GPU fast enough that the resize is quick (on a slow one, resizing waits on a busy GPU and
   // froze the screen ~0.25 s right as the film faded in). Without it the start is the final word until adapt().
-  // Still frames (reduced motion) cost one frame a scroll: they keep the full budget.
-  const budget = timer && !reduced ? 0 : PX_BUDGET;
+  const budget = timer ? 0 : PX_BUDGET;
   let W = 1, H = 1, dpr = Q.dpr, cap = 0;
   const floor = () => Math.min(0.8, Math.max(0.5, Math.sqrt(1e6 / (W * H))));
   let sized = "";
@@ -903,13 +1057,32 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   ro.observe(el);
   resize();
   let winT = 0, winSlow = 0, badWins = 0, shadowStep = 0;
+  /** A smaller map, then a map redrawn every other frame. */
+  const stepShadows = () => {
+    if (shadowStep === 0) halveShadows();
+    else if (shadowStep === 1) {
+      shadowStep = 2;
+      renderer.shadowMap.autoUpdate = false;
+    }
+  };
+  const halveShadows = () => {
+    shadowStep = 1;
+    scene.traverse((o) => {
+      const l = o as T.SpotLight;
+      if (!l.isLight || !l.castShadow) return;
+      l.shadow.mapSize.multiplyScalar(0.5);
+      l.shadow.map?.dispose();
+      l.shadow.map = null; // remade at the new size on the next frame
+    });
+  };
   const adapt = (dt: number) => {
     // Sustained jank steps quality down, cheapest loss first: resolution, then bloom, then shadows. Never back up
     // mid-session (flip-flopping is worse than soft). Panels run capped at 30 fps, so their budget is wider.
     // Judged on time, not a count of slow frames: a GPU past its fill rate runs most frames at full speed and then
     // stalls for 300-900 ms while rAF waits on it, a pattern a slow-frame counter (fast frames paying it back) never
     // added up to. Two seconds running, each with over 15% of it in slow frames (one 150 ms freeze a second, which
-    // reads as a stutter), is a step down.
+    // reads as a stutter), is a step down. (Main-thread time can't tell a slow CPU from a busy GPU here: WebGL calls
+    // block on a full GPU queue. Measured on a 4x-throttled phone profile, a smaller canvas still won back 60 fps.)
     dt = Math.min(dt, 0.5); // one hitch (a GC, a slow tab switch back) can't make two bad seconds on its own
     winT += dt;
     if (dt > (page ? 1 / 40 : 1 / 24)) winSlow += dt;
@@ -925,19 +1098,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     // Shadows step down without ever switching off: turning the shadow map off changes every lit material's shader, and
     // recompiling them all froze the page for ~0.4 s, mid-scroll, on exactly the machine that was already struggling.
     // A smaller map, then a map redrawn every other frame, cost nothing to switch to.
-    else if (shadowStep === 0) {
-      shadowStep = 1;
-      scene.traverse((o) => {
-        const l = o as T.SpotLight;
-        if (!l.isLight || !l.castShadow) return;
-        l.shadow.mapSize.multiplyScalar(0.5);
-        l.shadow.map?.dispose();
-        l.shadow.map = null; // remade at the new size on the next frame
-      });
-    } else if (shadowStep === 1) {
-      shadowStep = 2;
-      renderer.shadowMap.autoUpdate = false;
-    }
+    else stepShadows();
   };
 
   // Where the browser times GPU work (EXT_disjoint_timer_query: Chromium, Firefox), a few frames are timed as they
@@ -982,7 +1143,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     pointer.x = (e.clientX / window.innerWidth - 0.5) * 2;
     pointer.y = (e.clientY / window.innerHeight - 0.5) * 2;
   };
-  if (!reduced) window.addEventListener("pointermove", onMove, { passive: true });
+  window.addEventListener("pointermove", onMove, { passive: true });
 
   // ─── scroll → chapters ───
   const chapters = page ? trackChapters() : null;
@@ -1109,7 +1270,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   let lastEdit = -Infinity;
   const edit = () => {
     const now = performance.now();
-    if (reduced || now - lastEdit < 1000) return;
+    if (now - lastEdit < 1000) return;
     lastEdit = now;
     st.flash = 1;
     st.punch = 1.2;
@@ -1145,7 +1306,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     const dt = clamp((now - prev) / 1000, 0, 0.05);
     prev = Math.max(prev, now);
     const t = (now - t0) / 1000;
-    if (!reduced) lightT += dt;
+    lightT += dt;
 
     // Scroll: chapter, progress, and velocity (px/s, smoothed) that pumps the tempo.
     let ci = 0, cf = 0;
@@ -1179,10 +1340,9 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     }
     const jump = page && want.id !== heading.id && (!!st.trans || Math.abs(wantChapter - st.setFor) >= 2);
     if (jump) {
-      // Still frames (reduced motion) draw once per scroll stop, so they can't wait for the wish to settle.
-      if (reduced || t - wantedAt >= 0.3) cutTo(want);
+      if (t - wantedAt >= 0.3) cutTo(want);
     } else if (!st.trans && want.id !== st.lift.id) {
-      if (reduced || !st.rep || st.rep.still) startTransition(want);
+      if (!st.rep || st.rep.still) startTransition(want);
       else hurry = true;
     }
     if (page && want.id === (st.trans?.to ?? st.lift).id) st.setFor = wantChapter;
@@ -1192,8 +1352,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     let beatDrive = false, beatFloor = false;
     if (st.trans) {
       const tr = st.trans;
-      // Still frames jump straight to the next lift, never a half-way pose.
-      tr.t = reduced ? tr.path.total : tr.t + dt * (1 + Math.min(0.8, scrollVel / 2200));
+      tr.t += dt * (1 + Math.min(0.8, scrollVel / 2200));
       pose = pathAt(tr.path, tr.t);
       if (tr.t >= tr.path.total) {
         beginLift(tr.to);
@@ -1203,15 +1362,14 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
       // Scrolling pumps the tempo and a pending change of lift hurries the rep, but never past what a lifter can move:
       // the curl's bar already travels at ~2.3 m/s at 1×, and uncapped (5.7×) it hit 12 m/s. Past ~1.8× it is a blur.
       const rate = Math.min(MAX_REP_RATE, (1 + Math.min(1.6, scrollVel / 1400)) * (hurry ? 2.2 : 1));
-      if (reduced) st.repT = holdTime(st.lift, st.plan); // still frame: hold the finish
-      else st.repT += dt * rate;
+      st.repT += dt * rate;
       if (st.repT >= st.plan.total) {
         st.repT -= st.plan.total;
         st.plan = repPlan(st.lift, ++st.repN);
       }
       const r = repAt(st.lift, st.plan, st.repT);
       // Beats of a rep, for every segment finished since the last frame (a fast scroll can cross a short one).
-      if (st.rep && !reduced) {
+      if (st.rep) {
         const n = st.lift.rep.length;
         for (let k = st.rep.seg; k !== r.seg; k = (k + 1) % n) {
           const done = st.lift.rep[k]!;
@@ -1231,7 +1389,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     // Life in the body: breathing (faster and deeper as the set wears on), a little sway, a bar never perfectly still.
     const fatigue = st.trans ? 0 : (st.repN % SET_REPS) / (SET_REPS - 1);
     st.breath += dt * (2.1 + effort * 1.4 + fatigue * 1.1);
-    const breath = reduced ? 0.5 : 0.5 + (0.5 + fatigue * 0.25) * Math.sin(st.breath);
+    const breath = 0.5 + (0.5 + fatigue * 0.25) * Math.sin(st.breath);
     pose = sway(pose, Math.sin(t * 0.9) * 0.006, (breath - 0.5) * 0.004);
     if (st.lift.id === "lockout" && !st.trans) {
       // Holding a load overhead: a fine tremor that grows as the set goes on.
@@ -1272,7 +1430,6 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     const sag = onFloor ? 0 : 0.012;
     st.bendV += (-(st.bend - sag) * 180 - st.bendV * 11 + clamp(acc, -40, 40) * 0.004) * dt;
     st.bend = clamp(st.bend + st.bendV * dt, -0.05, 0.05);
-    if (reduced) st.bend = sag;
     // The head gets out of the bar's way: as it passes the face (on a press, or going overhead) the chin draws back
     // and up, and comes through again once the bar is past the crown.
     const shY = (sk.shoulderL[1] + sk.shoulderR[1]) / 2, shZ = (sk.shoulderL[2] + sk.shoulderR[2]) / 2;
@@ -1324,7 +1481,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     pointer.sy = damp(pointer.sy, pointer.y, 3, dt);
     vA.x += pointer.sx * 0.28;
     vA.y -= pointer.sy * 0.14;
-    if (!cam.init || reduced) {
+    if (!cam.init) {
       cam.pos.copy(vA);
       cam.target.copy(tA);
       cam.fov = fov;
@@ -1344,8 +1501,8 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     st.punch = Math.max(0, st.punch - dt * 2.5);
     st.flash = Math.max(0, st.flash - dt * 4);
     st.kick = Math.max(0, st.kick - dt * 2.2);
-    const hx = reduced || steady ? 0 : Math.sin(t * 0.71) * 0.012 + Math.sin(t * 1.93) * 0.005;
-    const hy = reduced || steady ? 0 : Math.sin(t * 0.83 + 1.3) * 0.009;
+    const hx = steady ? 0 : Math.sin(t * 0.71) * 0.012 + Math.sin(t * 1.93) * 0.005;
+    const hy = steady ? 0 : Math.sin(t * 0.83 + 1.3) * 0.009;
     const sh = st.shake * st.shake * 0.035;
     camera.position.set(cam.pos.x + hx + (Math.random() - 0.5) * sh, cam.pos.y + hy + (Math.random() - 0.5) * sh, cam.pos.z);
     camera.lookAt(cam.target);
@@ -1393,7 +1550,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
       el.setAttribute("data-gym-live", "");
       pauseLoop(el);
       opts.onLive();
-    }, 700);
+    }, 450); // the canvas's 0.35s fade, and a frame or two
   };
 
   if (process.env.NODE_ENV !== "production") {
@@ -1411,6 +1568,17 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
       grain: (g: number) => (film.uniforms.uGrain!.value = g),
       openLoop: syncToLoop,
       steady: (on: boolean) => (steady = on),
+      // Render at exactly this pixel ratio, full quality, whatever this machine's GPU would settle on (the render
+      // scripts: a slow GPU's calibration must not shrink the frames they encode).
+      // Whether the first frame can draw yet (shaders compiled): until then advance() draws nothing, and a capture
+      // reads a blank canvas.
+      ready: () => compiled,
+      ratio: (r: number) => {
+        Q.dpr = r;
+        cap = r;
+        bloom.enabled = true;
+        resize();
+      },
       // Stop the live loop: only advance() draws from here on (so capture stalls can't trip the quality step-down).
       park: () => cancelAnimationFrame(raf),
       hold: () => (st.repT = holdTime(st.lift, st.plan)),
@@ -1582,10 +1750,40 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   };
   // A screen test before the film goes on: the first frames render unseen behind the opening poster, and their
   // median gap (12 frames or 1 s, whichever comes first, skipping the warm-up) decides whether this machine can run
-  // it at all. Below ~22 fps (~17 for 30 fps panels) the posters look better and cost nothing, so the reader never
-  // sees a stuttering film.
+  // it at all. Below ~22 fps (~17 for 30 fps panels) the reader would see a stuttering film. A machine that fails gets
+  // one more test at the film's lowest quality (a canvas down to 0.5x, under adapt()'s floor on most screens, no bloom, half-size shadows) before the posters
+  // take over: phones and small iGPUs mostly pass it, and a softer film that moves beats a still picture.
+  // Before any of that, a page film running under ~45 fps above its floor is first sized to its frame rate (fill is its
+  // cost: pixels scale with 1/time) and tested again. That is the sizing on GPUs that can't be timed (Safari, most
+  // phones), which start at the full pixel budget: sharp where the GPU keeps up, never a stutter where it doesn't.
   const gaps: number[] = [];
-  let judgeFrom = 0, bailTimer = 0;
+  let judgeFrom = 0, bailTimer = 0, retried = false, fitted = false;
+  const settle = () => {
+    // Calibration is over: the size is set here, and a late timing must not grow it back.
+    calDone = true;
+    calQ.splice(0).forEach((x) => gl.deleteQuery(x));
+    gaps.length = 0;
+    judgeFrom = 0; // the next frame starts the test again (its gap pays for the resize)
+  };
+  // A frame-rate cap (iOS Low Power Mode, battery savers: 30 fps on any GPU) looks the same as a GPU that can't keep up,
+  // but a smaller canvas doesn't speed it up: if the retest's frames are no faster, the full size comes back.
+  let unfit: { cap: number; median: number } | null = null;
+  const fit = (median: number) => {
+    fitted = true;
+    unfit = { cap: dpr, median };
+    cap = Math.max(floor(), dpr * Math.sqrt(1000 / 60 / median));
+    resize();
+    settle();
+  };
+  const lowest = () => {
+    retried = true;
+    // Under adapt()'s floor wherever that is above 0.5 (phones: 0.8 → 0.6): a soft film that moves beats a still one.
+    cap = Math.max(0.5, floor() * 0.75);
+    resize();
+    bloom.enabled = false;
+    if (shadowStep === 0) halveShadows();
+    settle();
+  };
   const judge = (gap: number) => {
     if (shown || bailTimer || !compiled) return;
     const now = performance.now();
@@ -1598,25 +1796,24 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     // Its size settled first (calibration's resize runs while the film is still hidden, never mid-crossfade).
     if (!calDone && now - judgeFrom < 1500) return;
     const sample = gaps.slice(Math.min(2, gaps.length >> 2)).sort((x, y) => x - y);
-    const median = sample[sample.length >> 1]!;
-    if (median > (page ? 45 : 60) && !forcedLive()) bailTimer = window.setTimeout(opts.onSlow, 0); // not from inside this frame
-    else reveal();
+    let median = sample[sample.length >> 1]!;
+    if (unfit) {
+      const was = unfit;
+      unfit = null;
+      if (median > was.median * 0.85) {
+        cap = was.cap;
+        resize();
+        median = Math.max(median, was.median); // judged as the size it will run at
+      }
+    }
+    if (forcedLive()) reveal();
+    else if (page && !fitted && !retried && median > 22 && dpr > floor() + 0.05) fit(median);
+    else if (median <= (page ? 45 : 60)) reveal();
+    else if (!retried) lowest();
+    else bailTimer = window.setTimeout(opts.onSlow, 0); // not from inside this frame
   };
   let lastFrame = performance.now();
   let io: IntersectionObserver | null = null;
-  // Still frames are coalesced and drawn once scrolling pauses, so a burst of scroll events costs one frame.
-  let stillTimer = 0, stillQueued = false;
-  const onScrollStill = () => {
-    clearTimeout(stillTimer);
-    stillTimer = window.setTimeout(() => {
-      if (stillQueued) return;
-      stillQueued = true;
-      requestAnimationFrame(() => {
-        stillQueued = false;
-        frame(performance.now());
-      });
-    }, 16);
-  };
   function dispose() {
     dead = true;
     cancelAnimationFrame(raf);
@@ -1627,9 +1824,6 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     ro.disconnect();
     chapters?.stop();
     window.removeEventListener("pointermove", onMove);
-    clearTimeout(stillTimer);
-    window.removeEventListener("scroll", onScrollStill);
-    window.removeEventListener("resize", onScrollStill);
     world.dispose();
     athlete.dispose();
     lifter?.dispose();
@@ -1665,23 +1859,13 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
       await warmUp();
       if (dead) return;
       compiled = true;
-      if (reduced) {
-        frame(performance.now());
-        reveal();
-      }
     })
     .catch(() => {
       if (!dead) opts.onSlow();
     });
-  if (reduced) {
-    // Still frames: one per scroll or resize, each fully composed (lifter held at lockout, lights on).
-    window.addEventListener("scroll", onScrollStill, { passive: true });
-    window.addEventListener("resize", onScrollStill);
-  } else {
-    io = new IntersectionObserver(([e]) => (visible = !!e?.isIntersecting), { threshold: 0 });
-    io.observe(el);
-    raf = requestAnimationFrame(loop);
-  }
+  io = new IntersectionObserver(([e]) => (visible = !!e?.isIntersecting), { threshold: 0 });
+  io.observe(el);
+  raf = requestAnimationFrame(loop);
 
   return dispose;
 }

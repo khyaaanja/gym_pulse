@@ -649,12 +649,8 @@ body {
   from { transform: scale(1.02) translate3d(0.6%, 0.4%, 0); }
   to { transform: scale(1.08) translate3d(-0.6%, -0.4%, 0); }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .gym-poster { animation: poster-drift 22s ease-in-out infinite alternate; will-change: transform; }
-}
-/* The opening loop: never shown to reduced-motion readers (browsers before ~2023 ignore its sources' media queries and
-   would play it anyway), and never with iOS's play glyph over the hero when Low Power Mode blocks autoplay. */
-/* Gym loop always shows */
+.gym-poster { animation: poster-drift 22s ease-in-out infinite alternate; will-change: transform; }
+/* The opening and chapter loops: never with iOS's play glyph over the stage when Low Power Mode blocks autoplay. */
 .gym-loop::-webkit-media-controls-start-playback-button { display: none !important; -webkit-appearance: none; }
 /* Once the live film has crossfaded in, the posters under it are hidden: no drift composited behind an opaque canvas. */
 [data-gym-live] > :not(canvas) { display: none; }

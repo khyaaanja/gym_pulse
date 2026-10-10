@@ -5,7 +5,7 @@ import type * as THREE_NS from "three";
 /**
  * A member's milestone medal in 3D: it spins in once when the page opens (the member app's
  * celebratory moment), then idles; members can drag to spin it. Locked tiers render as a
- * frosted, unlit coin. Reduced motion → a still, face-on medal. No WebGL → the fallback shows.
+ * frosted, unlit coin. It moves on every device, reduced-motion settings included. No WebGL → the fallback shows.
  */
 export function Medal3D({ tier, caption, color, locked = false, className, fallback }: { tier: string; caption: string; color: string; locked?: boolean; className?: string; fallback?: React.ReactNode }) {
   const host = useRef<HTMLDivElement>(null);
@@ -93,7 +93,6 @@ function faceTexture(THREE: typeof THREE_NS, tier: string, caption: string, colo
 }
 
 function mount(THREE: typeof THREE_NS, el: HTMLDivElement, o: { tier: string; caption: string; color: string; locked: boolean }) {
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let renderer: THREE_NS.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
@@ -199,18 +198,13 @@ function mount(THREE: typeof THREE_NS, el: HTMLDivElement, o: { tier: string; ca
     raf = requestAnimationFrame(loop);
     if (visible && !document.hidden) frame();
   };
-  let io: IntersectionObserver | null = null;
-  if (reduced) {
-    renderer.render(scene, camera);
-  } else {
-    io = new IntersectionObserver(([e]) => (visible = !!e?.isIntersecting));
-    io.observe(el);
-    loop();
-  }
+  const io = new IntersectionObserver(([e]) => (visible = !!e?.isIntersecting));
+  io.observe(el);
+  loop();
 
   return () => {
     cancelAnimationFrame(raf);
-    io?.disconnect();
+    io.disconnect();
     ro.disconnect();
     el.removeEventListener("pointerdown", down);
     el.removeEventListener("pointermove", move);

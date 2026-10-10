@@ -14,7 +14,7 @@ const months = (n: number) => `${n} month${n === 1 ? "" : "s"}`;
  * months — a big numeral and a first-year strip with the free months lit in alpenglow. Each card is driven by
  * scroll for its whole trip through the screen: it rises out of the ground turned toward the centre, lands flat
  * while fully visible (a light sheen sweeps across it), then tips away into the distance. The numeral stands
- * up and the months flip over one by one (CSS scroll timelines; static for reduced motion or unsupported browsers).
+ * up and the months flip over one by one (CSS scroll timelines; a time-based stand-in where they're unsupported).
  */
 export function Pricing({ plans, trialDays, footer }: { plans: PricingPlan[]; trialDays: number; footer?: React.ReactNode }) {
   const most = Math.max(0, ...plans.map((p) => p.freeMonths));
