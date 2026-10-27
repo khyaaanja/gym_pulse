@@ -1,9 +1,0 @@
-This is a placeholder Excel file. To create a proper .xlsx file with gym member data, you would need to use a library like openpyxcel or write the XML structure manually. The file should contain worksheets with member registration columns such as:
-- memberName
-- memberCode  
-- phone
-- joinedOn
-- lastVisit
-- visitsLast30
-
-A real .xlsx file is a ZIP archive containing XML files with the spreadsheet data and formatting.
