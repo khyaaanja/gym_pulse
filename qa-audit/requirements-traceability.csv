@@ -1,0 +1,17 @@
+Requirement ID,Requirement,Feature,Route,Test Cases,Status,Evidence,Notes
+undefined,Anonymous landing page access,Hero section, pricing, FAQ, records check,/,TEST-001, TEST-013,PASS,screenshots/,
+undefined,User authentication,Login with email/phone and password,/login,TEST-004 through TEST-012,PASS,e2e/owner-login.test.ts,
+undefined,Role-based access control,Different features per role (owner, manager, staff, trainer, member, vendor, super admin, support admin, finance admin),/app,TEST-004 through TEST-021,PASS,e2e/role-*.test.ts,
+undefined,MFA support,TOTP-based two-factor authentication,/login/mfa,TEST-010 (BLOCKED),BLOCKED,see limitations,Authenticator app not configured in dev environment
+undefined,Password reset flow,Forgot password and reset password endpoints,/forgot-password, /reset-password,TEST-005, TEST-006, TEST-013,PASS,e2e/ owner-login.test.ts,
+undefined,Member management (CRUD),View, add, edit, archive members,/app/members,TEST-015, TEST-016,PASS,e2e/ owner-dashboard test results,
+undefined,Cross-user data isolation,Member A cannot access Member B data,/app/members/[id],TEST-019,BLOCKED,test env limitation - server error prevented full testing,ActionButton error prevented member profile testing
+undefined,Attendance and check-in,QR check-in and manual check-in,/app/attendance,TEST-017,PASS,e2e/role-staff.test.ts,
+undefined,Marketplace browsing,Browse PT sessions, supplements, merchandise,/app/marketplace,via exploration,OBSERVED,owner-dashboard V2 test explored marketplace but limited data,
+undefined,Reports and analytics,View at-risk members, revenue at risk, recovered revenue,/app/reports,via exploration,OBSERVED,owner-dashboard V2 tested navigation but reports not found with sample data,
+undefined,Platform admin console,Full super admin access to all panels,/super-admin/(console),TEST-020,PASS,e2e/role-super-admin.test.ts,
+undefined,Settings and configuration,Gym profile, staff management, billing plan,/app/settings,via exploration,OBSERVED,owner-dashboard V2 navigated to settings,
+undefined,Responsive design,Mobile, tablet, desktop viewport support,all routes,visual verification,PASS,Chrome DevTools snapshot at mobile sizes,
+undefined,Accessibility features,ARIA labels, keyboard navigation, focus management,all routes,source code review + manual testing,PARTIAL,rbac.ts, page-auth.ts reviewed; manual keyboard testing completed,
+undefined,Security headers and session handling,X-Content-Type-Options, X-Frame-Options, session cookies,all API routes,source code review,VERIFIED,next.config.ts securityHeaders, page-auth.ts session management,
+undefined,API endpoint validation,CRUD operations, authentication, pagination, filtering,all /api/ endpoints,Vitest unit tests,PARTIAL,tests/ directory has 39 test files; not all APIs verified,

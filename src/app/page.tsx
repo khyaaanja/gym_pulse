@@ -12,7 +12,7 @@ import { RecordsCheck } from "@/components/marketing/records-check";
 import { Words } from "@/components/marketing/words";
 import { formatMoney } from "@/lib/money";
 
-export const dynamic = "force-dynamic";
+export const dynamic = "auto";
 
 type Hero = { eyebrow?: string; title: string; subtitle: string; primaryCta: string; secondaryCta: string };
 type Features = { items: { title: string; body: string }[] };

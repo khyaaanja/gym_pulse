@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { requireStaff } from "@/lib/page-auth";
 import { localDate, diffDays, today as todayIn, fromDbDate, formatDate } from "@/lib/time";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, RiskStatus } from "@/generated/prisma/client";
 import { Card, CardBody } from "@/components/ui/card";
 import { PageHeader, EmptyState } from "@/components/ui/misc";
 import { RiskBadge, EstimateBadge } from "@/components/ui/badge";
 import { Table, Td, Th } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/fields";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { formatMoney } from "@/lib/money";
@@ -19,25 +20,65 @@ export default async function Members({ searchParams }: PageProps<"/app/members"
   const ctx = await requireStaff("members.view");
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.slice(0, 80) : "";
-  const status = ["ACTIVE", "ATTENTION", "AT_RISK", "LOST"].includes(String(sp.status)) ? (String(sp.status) as "ACTIVE") : undefined;
+  const statusFilter = String(sp.status ?? "ALL");
   const page = Math.max(1, Number(sp.page) || 1);
-  const where: Prisma.MemberWhereInput = { archivedAt: null, ...(status ? { riskStatus: status } : {}), ...memberScope(ctx) };
+  
+  // Build where clause based on status filter
+  let where: Prisma.MemberWhereInput = { archivedAt: null };
+  if (statusFilter === "ARCHIVED") {
+    where = { archivedAt: { not: null } };
+  } else if (statusFilter !== "ALL") {
+    where = { archivedAt: null, riskStatus: statusFilter as RiskStatus };
+  }
+  
   if (q) {
     const digits = q.replace(/\D/g, "");
     where.OR = [{ fullName: { contains: q, mode: "insensitive" } }, { memberCode: { contains: q, mode: "insensitive" } }, ...(digits.length >= 4 ? [{ phone: { contains: digits } }] : [])];
   }
+  
   const today = todayIn(ctx.gym.timezone);
   const [items, total, plans, trainers] = await Promise.all([
-    ctx.db.member.findMany({ where, orderBy: { fullName: "asc" }, skip: (page - 1) * PAGE, take: PAGE, include: { memberships: { where: { status: { in: ["ACTIVE", "EXPIRED"] } }, orderBy: { endDate: "desc" }, take: 1, include: { plan: true } } } }),
+    ctx.db.member.findMany({
+      where,
+      orderBy: { fullName: "asc" },
+      skip: (page - 1) * PAGE,
+      take: PAGE,
+      include: {
+        memberships: {
+          where: {
+            status: { in: ["ACTIVE", "EXPIRED"] },
+          },
+          orderBy: { endDate: "desc" },
+          include: {
+            plan: true,
+          },
+        },
+      },
+    }),
     ctx.db.member.count({ where }),
     ctx.db.membershipPlan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     ctx.db.staffMember.findMany({ where: { role: "TRAINER", active: true }, include: { user: { select: { name: true } } } }),
   ]);
-  const qs = (p: number) => `/app/members?${new URLSearchParams({ ...(q ? { q } : {}), ...(status ? { status } : {}), page: String(p) })}`;
+  
+  // When viewing archived, show all archived members; otherwise use items
+  const displayItems = statusFilter === "ARCHIVED" 
+    ? await ctx.db.member.findMany({ where: { archivedAt: { not: null } }, orderBy: { fullName: "asc" }, take: 100, include: { memberships: { where: { status: { in: ["ACTIVE", "EXPIRED"] } }, select: { plan: true, endDate: true } } } })
+    : items;
+
+  const qs = (p: number) => `/app/members?${new URLSearchParams({ ...(q ? { q } : {}), ...(statusFilter ? { status: statusFilter } : {}), page: String(p) })}`;
+
+  const statusLabels: Record<string, string> = {
+    ALL: "All",
+    ACTIVE: "Active",
+    ATTENTION: "Attention", 
+    AT_RISK: "At Risk",
+    LOST: "Lost",
+    ARCHIVED: "Archived",
+  };
 
   return (
     <>
-      <PageHeader title="Members" description={`${total} ${status ? status.replace("_", " ").toLowerCase() : ""} members`} actions={ctx.can("members.edit") || ctx.can("members.invite") ? (
+      <PageHeader title="Members" description={`${total} ${statusLabels[statusFilter] || ""} members`} actions={ctx.can("members.edit") || ctx.can("members.invite") ? (
         <>{ctx.can("members.edit") && (
           <FormDialog trigger={<Button>Add member</Button>} title="Add member" endpoint="/api/gym/members" successMessage="Member added" fields={[
             { name: "fullName", label: "Full name", required: true },
@@ -55,30 +96,60 @@ export default async function Members({ searchParams }: PageProps<"/app/members"
       ) : undefined} />
       <form className="mb-4 flex flex-wrap gap-2" action="/app/members">
         <Input name="q" defaultValue={q} placeholder="Search name, phone or member ID" className="max-w-sm" aria-label="Search members" />
-        {status && <input type="hidden" name="status" value={status} />}
+        {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
         <Button type="submit" variant="secondary">Search</Button>
         <div className="flex flex-wrap gap-1">
-          {[undefined, "ACTIVE", "ATTENTION", "AT_RISK", "LOST"].map((s) => (
-            <Link key={s ?? "all"} href={`/app/members?${new URLSearchParams({ ...(q ? { q } : {}), ...(s ? { status: s } : {}) })}`} className={`rounded-full px-3 py-2 text-sm ${status === s ? "bg-ink text-mist" : "text-ink-2 hover:bg-surface-2"}`}>{s ? s.replace("_", " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : "All"}</Link>
+          {["ALL", "ACTIVE", "ATTENTION", "AT_RISK", "LOST", "ARCHIVED"].map((s, i) => (
+            <Link key={i} href={`/app/members?${new URLSearchParams({ ...(q ? { q } : {}), ...(s ? { status: s } : {}) })}`} className={`rounded-full px-3 py-2 text-sm ${statusFilter === s ? "bg-ink text-mist" : "text-ink-2 hover:bg-surface-2"}`}>{statusLabels[s]}</Link>
           ))}
         </div>
       </form>
       <Card><CardBody>
-        {items.length === 0 ? <EmptyState title="No members found" body={q ? "Try a different search." : "Add a member, or import your existing records from Analyze Records."} /> : (
+        {displayItems.length === 0 ? <EmptyState title="No members found" body={q ? "Try a different search." : "Add a member, or import your existing records from Analyze Records."} /> : (
           <Table>
-            <thead><tr><Th>Member</Th><Th>Status</Th><Th>Plan</Th><Th>Expires</Th><Th>Last visit</Th><Th className="text-right">Streak</Th></tr></thead>
+            <thead>
+              <tr>
+                <Th>Member</Th>
+                <Th>Status</Th>
+                <Th>Plan</Th>
+                <Th>Expires</Th>
+                <Th>Last visit</Th>
+                <Th className="text-right">Streak</Th>
+                <Th>Actions</Th>
+              </tr>
+            </thead>
             <tbody>
-              {items.map((m) => {
-                const ms = m.memberships[0];
+              {displayItems.map((m) => {
+                const isArchived = m.archivedAt !== null;
+                const ms = m.memberships ? (m.memberships.length > 0 ? m.memberships[0] : undefined) : undefined;
                 const last = m.lastAttendanceAt ? diffDays(localDate(m.lastAttendanceAt, ctx.gym.timezone), today) : null;
+                const statusText = isArchived ? "Archived" : (m.riskStatus || "ACTIVE");
                 return (
                   <tr key={m.id}>
-                    <Td><Link href={`/app/members/${m.id}`} className="font-medium hover:underline">{m.fullName}</Link><span className="block text-xs text-ink-3">{m.memberCode}{m.phone ? ` · ${m.phone}` : ""}</span></Td>
-                    <Td><div className="flex flex-wrap gap-1"><RiskBadge status={m.riskStatus} /><EstimateBadge category={m.riskCategory === "LOW" ? null : m.riskCategory} /></div></Td>
+                    <Td>
+                      <Link href={`/app/members/${m.id}`} className="font-medium hover:underline">{m.fullName}</Link>
+                      <span className="block text-xs text-ink-3">{m.memberCode}{m.phone ? ` · ${m.phone}` : ""}</span>
+                    </Td>
+                    <Td><RiskBadge status={m.riskStatus} />{isArchived ? " · Archived" : ""}</Td>
                     <Td className="text-ink-2">{ms?.plan.name ?? "—"}</Td>
                     <Td className="whitespace-nowrap text-ink-2">{ms ? formatDate(fromDbDate(ms.endDate), { day: "numeric", month: "short", year: "2-digit" }) : "—"}</Td>
                     <Td className="whitespace-nowrap">{last === null ? "Never" : last === 0 ? "Today" : `${last}d ago`}</Td>
                     <Td className="num text-right">{m.currentStreak}</Td>
+                    <Td>
+                      {isArchived && ctx.can("members.edit") ? (
+                        <ActionButton 
+                          variant="ghost" 
+                          className="text-ok" 
+                          method="PATCH" 
+                          endpoint={`/api/gym/members/${m.id}`} 
+                          confirm={`Unarchive ${m.fullName}? They'll return to active lists.`} 
+                          success="Member unarchived" 
+                          redirectTo="/app/members"
+                        >
+                          Unarchive
+                        </ActionButton>
+                      ) : null}
+                    </Td>
                   </tr>
                 );
               })}
@@ -86,12 +157,12 @@ export default async function Members({ searchParams }: PageProps<"/app/members"
           </Table>
         )}
       </CardBody></Card>
-      {total > PAGE && (
+      {displayItems.length > PAGE && (
         <nav className="mt-4 flex items-center justify-between text-sm" aria-label="Pages">
-          <span className="text-ink-3">Page {page} of {Math.ceil(total / PAGE)}</span>
+          <span className="text-ink-3">Page {page} of {Math.ceil(displayItems.length / PAGE)}</span>
           <div className="flex gap-2">
             {page > 1 && <Link className="rounded-xl bg-surface px-3 py-2 ring-1 ring-line" href={qs(page - 1)}>Previous</Link>}
-            {page * PAGE < total && <Link className="rounded-xl bg-surface px-3 py-2 ring-1 ring-line" href={qs(page + 1)}>Next</Link>}
+            {page * PAGE < displayItems.length && <Link className="rounded-xl bg-surface px-3 py-2 ring-1 ring-line" href={qs(page + 1)}>Next</Link>}
           </div>
         </nav>
       )}

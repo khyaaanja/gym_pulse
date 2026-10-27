@@ -25,12 +25,15 @@ const OWN = "[data-own-motion]";
 /**
  * App-wide pointer depth: small cards lean toward the cursor and lift off the page. One delegated listener for the
  * whole document, so every page gets it without per-component wiring. Mouse and pen only (touch scrolls), never
- * inside dialogs or while a field in the card has focus, and off entirely for prefers-reduced-motion.
+ * inside dialogs or while a field in the card has focus. Runs on every device; respects reduced-motion settings.
  * Also flips list rows in as they first scroll into view, and marks the first-load entrance as finished so it
  * never replays on client navigations.
  */
 export function Motion3D() {
   useEffect(() => {
+    // Respect reduced-motion: disable pointer tilt and scroll reveals
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
     const root = document.documentElement;
     // The first-load entrance ends when this attribute lands, and the CSS drops any entrance still playing, which
     // snaps it into place. So hold off while a loading skeleton is still waiting for content, or an entrance is still
@@ -40,7 +43,7 @@ export function Motion3D() {
       document.querySelector('main > [aria-busy="true"]') ||
       document.getAnimations().some((a) => a instanceof CSSAnimation && a.animationName.startsWith("enter-") && a.playState === "running");
     let ready = 0;
-    const maxRetries = 60; // max 60 retries × 100ms = 6s, matches deadline
+    const maxRetries = 120; // a backstop: 120 retries × 50ms is about the 6s deadline, which normally ends it first
     let retryCount = 0;
     const settle = () => {
       retryCount++;
@@ -52,7 +55,7 @@ export function Motion3D() {
         return;
       }
       if (entering() && performance.now() < deadline) {
-        ready = window.setTimeout(settle, 100);
+        ready = window.setTimeout(settle, 50);
         return;
       }
       // armMotionHandOff (handoff.ts, inlined by the root layout) hands each scroll-rise card back to its rise the frame
@@ -60,12 +63,12 @@ export function Motion3D() {
       (window as Window & { gpMotionHandOff?: { all(): void } }).gpMotionHandOff?.all();
       root.setAttribute("data-motion-ready", "");
       // The first look for rows and blocks to flip in waits until now: during the first load the page is busy hydrating,
-      // its mutations would re-run the scan every 120 ms, and nothing it finds can flip before the entrance is over.
+      // its mutations would re-run the scan every 50 ms, and nothing it finds can flip before the entrance is over.
       scan(true);
     };
-    // First look after 800 ms: settle() itself waits out a busy skeleton or a running entrance, so this only needs to
-    // clear hydration, and a shorter wait lets the row flips start sooner on slow phones.
-    ready = window.setTimeout(settle, 800);
+    // First look after 300 ms: settle() itself waits out a busy skeleton or a running entrance (~270 ms at most), so
+    // this only needs to clear hydration, and a short wait lets the row flips start straight away.
+    ready = window.setTimeout(settle, 300);
 
     let active: HTMLElement | null = null;
     let frame = 0;
@@ -84,7 +87,7 @@ export function Motion3D() {
           el.style.removeProperty("--tilt-y");
           el.style.removeProperty("--tilt-z");
         }
-      }, 520);
+      }, 200); // the [data-tilt] settle transition in globals.css
     };
 
     const tiltable = (el: HTMLElement) => {
@@ -140,7 +143,10 @@ export function Motion3D() {
               const el = entry.target as HTMLElement;
               if (!seen.has(el)) {
                 seen.add(el);
-                if (entry.isIntersecting && !fresh.has(el)) {
+                // Anything on screen (not just inside the -6% margin below) already moved with the entrance or the page
+                // swing, so it doesn't flip in a second time. Rows above the screen (a restored scroll, a #hash) still flip.
+                const r = entry.boundingClientRect;
+                if (r.bottom > 0 && r.top < window.innerHeight && !fresh.has(el)) {
                   io!.unobserve(el);
                   continue;
                 }
@@ -149,16 +155,24 @@ export function Motion3D() {
               io!.unobserve(el);
               el.style.setProperty("--reveal-i", String(Math.min(i++, 6)));
               el.setAttribute("data-reveal", "");
-              el.addEventListener("animationend", () => { el.removeAttribute("data-reveal"); el.style.removeProperty("--reveal-i"); }, { once: true });
+              // Its own flip only: animationend bubbles, and a child's shorter animation would cut the flip short.
+              const end = (e: AnimationEvent) => {
+                if (e.target !== el) return;
+                el.removeEventListener("animationend", end);
+                el.removeAttribute("data-reveal");
+                el.style.removeProperty("--reveal-i");
+              };
+              el.addEventListener("animationend", end);
             }
           },
           { rootMargin: "0px 0px -6% 0px" },
         );
     const watched = new WeakSet<Element>();
     const cards = new WeakSet<Element>();
-    // Containers that just swung in as a whole; what's inside them already moved with them.
-    let moving: Element[] = [];
-    const within = (el: Element) => moving.some((m) => m.contains(el));
+    // Containers swinging in as a whole, until their swing ends; what's inside them already moves with them, even when
+    // it lands in a later batch of mutations.
+    const moving = new Set<Element>();
+    const within = (el: Element) => [...moving].some((m) => m.contains(el));
 
     // One swing for a whole block of new content, like the first-load entrance. Always on a plain container, never on
     // a card: a card already runs its scroll rise, and a second animation on it drops both off the compositor.
@@ -168,11 +182,11 @@ export function Motion3D() {
       // Transformed, it would become the containing block of a fixed control inside it (a floating cart button) and
       // drag it along; such content is left to its rows and blocks.
       if (el.querySelector('[class*="fixed"]')) return false;
-      moving.push(el);
+      moving.add(el);
       const origin = el.style.transformOrigin;
       el.style.transformOrigin = "50% 0";
-      const done = () => { el.style.transformOrigin = origin; };
-      el.animate(ENTER, { duration: 380, delay: 20, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "backwards" }).finished.then(done, done);
+      const done = () => { el.style.transformOrigin = origin; moving.delete(el); };
+      el.animate(ENTER, { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "backwards" }).finished.then(done, done);
       return true;
     };
 
@@ -196,7 +210,6 @@ export function Motion3D() {
         if (update && !within(el)) fresh.add(el);
         io.observe(el);
       }
-      moving = [];
     };
 
     // On a client navigation to a route with a loading skeleton (none at present: they held back first-visit content),
@@ -221,7 +234,7 @@ export function Motion3D() {
     const mo = new MutationObserver((records) => {
       if (!root.hasAttribute("data-motion-ready")) return; // the first scan runs when the entrance settles
       replacedSkeleton(records);
-      if (!pending) pending = window.setTimeout(() => { pending = 0; scan(); }, 120);
+      if (!pending) pending = window.setTimeout(() => { pending = 0; scan(); }, 50);
     });
     mo.observe(document.body, { childList: true, subtree: true });
 

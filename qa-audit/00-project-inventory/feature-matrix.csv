@@ -1,0 +1,206 @@
+# GymPulse Feature Matrix
+
+## Landing Page Features (Anonymous)
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Hero section | Main value proposition with scrolling 3D effect | ✓ |
+| How it works section | Three-column feature breakdown | ✓ |
+| Pricing section | Three SaaS plan tiers (Starter, Growth, Pro) | ✓ |
+| Free records check | Upload CSV/photo of register without account | ✓ |
+| FAQ section | Accordion-style questions and answers | ✓ |
+| CTAs | "Start free trial", "See how it works" buttons | ✓ |
+| Navigation links | Sign in, Sign up links in header | ✓ |
+| Social proof | "No card needed", "Cancel any time", "Your data stays yours" | ✓ |
+
+## Authentication Features
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Email/phone login | Sign in with email or Nepal phone number | ✓ |
+| Password validation | Minimum 10 characters | ✓ |
+| Google OAuth | "Sign up with Google" button (client ID not configured) | ⚠ |
+| Forgot password | Email/phone-based password reset request | ✓ |
+| Reset password | Token-based password reset flow | ✓ |
+| MFA verification | 6-digit TOTP code entry via authenticator app | ✓ (conditional) |
+| Account lockout | Rate limiting per account/IP (no hard lockout) | ✓ |
+| Device memory | Signed device cookie for reduced throttling | ✓ |
+
+## User Application Features (Authenticated)
+
+### Dashboard / Widgets
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| At-Risk Members widget | Count and revenue at risk (members >10 days inactive) | All authenticated |
+| Recent Check-ins widget | Today's/check-in activity list | All authenticated |
+| Quick Actions | Import CSV, add member manually, view reports | Manager, Owner |
+| Revenue at Risk dashboard | Interactive chart: trend over last 30 days | Manager, Owner |
+| Recovered Revenue Report | Members who returned after intervention | Manager, Owner |
+| Export data | CSV/PDF export of members, check-ins, at-risk data | Manager, Owner |
+
+### Member Management
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| Add member manually | Fill name, phone, email, join date, membership plan | Manager, Owner, Staff |
+| Import CSV | Upload CSV with member data, map columns, flag duplicates | Manager, Owner, Staff |
+| View members | List with search, filter by plan/branch/date | All authenticated (view) |
+| Edit member | Update member profile information | Owner, Manager (if permitted) |
+| Invite members | Send invitation to new members | Manager, Owner |
+| Archive member | Soft-delete/archive member record | Owner, Manager (if permitted) |
+| Member search | Search by name, phone, email | All authenticated |
+
+### Attendance & Check-in
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| QR check-in | Display QR code, staff scan when member arrives | Staff, Trainer |
+| Manual check-in | Open member profile, click Check-in | Staff, Trainer |
+| Check-in history | View member's attendance history and streaks | Manager, Owner, Staff |
+| Attendance filters | Filter by date range, method (QR/STAFF) | Manager, Owner |
+| Check-in device management | Register and manage QR/device check-in methods | Owner, Manager |
+
+### Marketplace
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| Browse categories | PT Sessions, Supplements, Merchandise, Yoga, Boxing, etc. | All authenticated |
+| Purchase PT packs | Buy personal training sessions | All authenticated (with wallet) |
+| Purchase merchandise | Buy T-shirts, shaker bottles, resistance bands | All authenticated |
+| Upload PT packs/services | Gym owners upload services and products | Owner |
+| Set pricing | Gym owners set their own pricing for products | Owner |
+| Track sales | View sales and earnings in Revenue tab | Owner, Manager |
+| 10% platform commission | Automatically deducted on marketplace sales | All authenticated |
+
+### Payments & Billing
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| Membership payments | Record and view membership payments | Manager, Owner |
+| Refunds | Process membership refunds | Manager, Owner (if permitted) |
+| Marketplace orders | Purchase from marketplace, pay via WhatsApp link | All authenticated |
+| Payment history | View payment history per member | Manager, Owner |
+| Invoice generation | Generate invoices for memberships | System auto-generated |
+| Wallet balance | Members' wallet for marketplace purchases | Members |
+
+### Reports & Analytics
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| At-Risk Members report | List of at-risk members with days since last visit | Manager, Owner |
+| Revenue at Risk dashboard | Total monthly revenue at risk across all members | Manager, Owner |
+| Recovered Revenue Report | Members who returned after intervention | Manager, Owner |
+| Export data | Export members, check-ins, or at-risk data as CSV | Manager, Owner |
+| Prediction reports | Churn risk estimates and forecasts | Manager, Owner |
+| Custom reports | Build custom reports with filters and time ranges | Manager, Owner |
+| Announcements | View and manage gym announcements | Manager, Owner |
+
+### Settings & Configuration
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| Gym profile | Update gym name, address, contact, timezone | Owner |
+| White label mode | Remove GymPulse branding, custom subdomain | Owner |
+| Staff accounts | Add trainers/staff, assign roles (Full Access, Check-in Only, Viewer) | Owner |
+| Notification settings | WhatsApp reminders, SMS gateway, offline sync | Manager, Owner |
+| Branding & colors | Upload logo, customize colors and font | Owner |
+| Billing plan | Change membership plans and prices | Owner, Manager (if permitted) |
+
+### Prediction & Risk Features
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| Churn prediction | AI/statistical model predicting at-risk members | Manager, Owner |
+| Inactivity threshold | Configurable days without visit (default: 10) | Manager, Owner |
+| Risk assessment | Per-member risk score and category | Manager, Owner |
+| Recovery automation | Automatic follow-up tasks for at-risk members | Manager, Owner |
+| Forecast horizon | configurable forecast period (default: 30 days) | Manager, Owner |
+
+### Vendor Features
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| Manage vendor products | Add/edit products in marketplace | Vendor |
+| View orders | View marketplace orders placed by members | Vendor |
+| Manage vendor-gym relationships | Link products to specific gyms | Vendor |
+| View earnings | Track vendor share of marketplace sales | Vendor |
+
+## Super-Admin Platform Features
+
+| Feature | Description | Roles |
+|---------|-------------|-------|
+| Manage all gyms | View, create, update, suspend all gyms | SUPER_ADMIN |
+| Manage platform users | Create, suspend, reactivate PlatformAdmin accounts | SUPER_ADMIN |
+| Feature flags | Enable/disable platform-wide features | SUPER_ADMIN |
+| Automations management | Create/manage automation rules | SUPER_ADMIN |
+| Notifications management | Configure platform-wide notifications | SUPER_ADMIN |
+| Security management | Platform security settings, session management | SUPER_ADMIN |
+| System management | Overall platform configuration | SUPER_ADMIN |
+| Audit log | View all platform-level actions and changes | SUPER_ADMIN, FINANCE_ADMIN (partial) |
+| Billing management | Platform subscription management | SUPER_ADMIN, FINANCE_ADMIN |
+| Vendors management | Manage vendor relationships across gyms | SUPER_ADMIN, SUPPORT_ADMIN |
+| Members management | View/all members across all gyms | SUPER_ADMIN, SUPPORT_ADMIN |
+
+## Security Features
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Rate-limited login | Per-account and per-IP attempt limits | ✓ |
+| Device fingerprinting | Signed device cookie for trusted browsers | ✓ |
+| MFA support | TOTP-based two-factor authentication | ✓ (optional/conditional) |
+| Session expiry | Absolute and idle session timeouts | ✓ |
+| Password hashing | Argon2 via @node-rs/argon2 | ✓ |
+| CSRF protection | Next.js built-in (form tokens) | ✓ |
+| Secure cookies | HttpOnly, SameSite=lax, conditional HTTPS in prod | ✓ |
+| Account lockout prevention | No hard lockout; throttling only | ✓ |
+| Failed login tracking | Incremental counter, reset on success | ✓ |
+| Rate limit reset | After successful login | ✓ |
+
+## Responsive Layout Features
+
+| Breakpoint | Features |
+|------------|----------|
+| Mobile (<640px) | Single-column layout, stacked content, hamburger menu, touch-friendly targets |
+| Tablet (640px-1024px) | Two-column layouts where appropriate, adjusted navigation |
+| Desktop (>1024px) | Full three-column layouts, expanded navigation, complete feature display |
+
+## Keyboard Navigation
+
+| Interaction | Support |
+|-------------|---------|
+| Tab navigation | ✓ |
+| Shift+Tab reverse | ✓ |
+| Enter activates buttons | ✓ |
+| Space activates buttons | ✓ |
+| Escape closes modals/dialogs | ✓ |
+| Focus management | ✓ (visible focus rings) |
+| Skip to content link | ✓ (on landing page) |
+
+## Accessibility (A11y)
+
+| Feature | Status |
+|---------|--------|
+| ARIA labels on interactive elements | ✓ |
+| Color contrast (Tailwind defaults) | ⚠ (needs verification) |
+| Keyboard focus visible | ✓ |
+| Semantic HTML | ✓ |
+| Alt text on images | ✓ |
+| Form labels | ✓ |
+| Heading hierarchy | ✓ |
+| Landmark regions | ✓ |
+
+## API-Backed Operations
+
+| Operation | Description |
+|-----------|-------------|
+| Member CRUD | Create, read, update, delete members |
+| Attendance tracking | Create attendance records, query history |
+| Payment recording | Create payments, view payment history |
+| Marketplace orders | Create orders, update status, view earnings |
+| Import/export | Process CSV imports, export reports |
+| Prediction reports | Generate churn forecasts, view risk assessments |
+| Recovery tasks | Create/manage recovery tasks for at-risk members |
+| Notification sending | Queue and send member notifications |
+| Staff management | Create/manage staff accounts and roles |
+| Setting updates | Modify gym configuration and settings |

@@ -1,0 +1,14 @@
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<h1>404 Not Found</h1>
+<ul>
+<li>Code: NoSuchKey</li>
+<li>Message: The specified key does not exist.</li>
+<li>Key: latest/k6-linux-amd64.tar.gz</li>
+<li>RequestId: HF04Z8ECFV6J15D6</li>
+<li>HostId: iy7gFNt9o87kazl4Bxt0mxU/UnATpZSaBxjMbt0ErUA9wMmd05rzb4U9NKIAEwFJaEhddq7Gfv3BAzIjxswZl+TWq9MG32Wd</li>
+</ul>
+<hr/>
+</body>
+</html>

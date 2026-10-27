@@ -7,10 +7,13 @@ import { usePathname } from "next/navigation";
  * `scope="area"` (root layout) keys by app area, so the app shell and admin console stay mounted while their own
  * PageTransition, around the shell's content, animates each page. Updates within a page (refreshes, search
  * params, Suspense reveals) don't animate. Browsers without the View Transitions API just swap pages as before.
+ * View transitions are opt-in: set `scope` to `"none"` to skip the animation and swap instantly.
  */
-export function PageTransition({ children, scope = "page" }: { children: React.ReactNode; scope?: "page" | "area" }) {
+export function PageTransition({ children, scope = "page" }: { children: React.ReactNode; scope?: "page" | "area" | "none" }) {
   const pathname = usePathname();
   const key = scope === "area" ? areaOf(pathname) : pathname;
+  // Skip ViewTransition entirely when scope is "none" for maximum speed on every navigation.
+  if (scope === "none") return <>{children}</>;
   return (
     <ViewTransition key={key} enter="page-3d" exit="page-3d" default="none">
       {children}

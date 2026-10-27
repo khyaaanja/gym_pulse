@@ -32,12 +32,27 @@ const patchSchema = z.object({
   status: z.enum(["ACTIVE", "FROZEN", "SUSPENDED"]).optional(),
   credentialUid: z.string().trim().max(64).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
+  archivedAt: z.date().nullable().optional(),
 });
 
 export const PATCH = gymRoute({ permission: "members.edit" }, async (ctx, req, params) => {
   const before = await load(ctx, String(params.id));
   const body = await parseJson(req, patchSchema);
   const data: Record<string, unknown> = { ...body };
+  
+  // Handle archivedAt for unarchive/archive operations
+  if (body.archivedAt !== undefined) {
+    // If archivedAt is null, unarchive the member
+    if (body.archivedAt === null) {
+      data.archivedAt = null;
+      data.status = "ACTIVE";
+    } else {
+      // If archivedAt is a date, archive the member
+      data.archivedAt = body.archivedAt;
+      data.status = "ARCHIVED";
+    }
+  }
+  
   if (body.phone !== undefined) {
     data.phone = body.phone ? normalizeNepalPhone(body.phone) : null;
     if (body.phone && !data.phone) throw badRequest("Enter a valid Nepal phone number.");

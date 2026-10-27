@@ -12,8 +12,20 @@
  *
  * It never reads layout after writing: every card is measured in one batch, the first time one is handed off, so a
  * page full of cards costs one layout instead of one per card (each attribute written dirties style for the next read).
+ *
+ * Respects prefers-reduced-motion: if enabled, the entrance is skipped entirely and cards go straight to their
+ * landed state.
  */
 export function armMotionHandOff() {
+  // Respect reduced-motion: skip entrance hand-off entirely
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.documentElement.setAttribute("data-motion-ready", "");
+    document.querySelectorAll('main > :not([aria-busy="true"]) > .scroll-3d:nth-child(-n + 8):not(.scroll-3d *)').forEach((el) => {
+      el.setAttribute("data-landed", "");
+    });
+    (window as Window & { gpMotionHandOff?: { all(): void } }).gpMotionHandOff = { all() {} };
+    return;
+  }
   // Must match the entrance and data-risen rules in globals.css.
   const cards = 'main > :not([aria-busy="true"]) > .scroll-3d:nth-child(-n + 8):not(.scroll-3d *)';
   let tops: Map<Element, number> | null = null;

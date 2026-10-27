@@ -1,0 +1,72 @@
+# GymPulse QA Risk Register
+
+## High-Risk Areas
+
+| Risk ID | Category | Description | Likelihood | Impact | Mitigation |
+|---------|----------|-------------|------------|--------|------------|
+| RISK-001 | Access Control | Privilege escalation: regular member accessing admin features by modifying URL or API parameters | Medium | Critical | Server-side permission checks enforced; API routes validate roles; audit log review |
+| RISK-002 | Data Leakage | Cross-user data exposure: changing member ID in URL accesses another user's private records | Medium | Critical | All API endpoints filter by userId/gymId; ownership verification in every endpoint; unit tests verify isolation |
+| RISK-003 | Authentication | Bypassing login: invalid credentials granting access through error message disclosure | Low | High | Rate limiting on login; no password exposure in error messages; session invalidation on failed attempts |
+| RISK-004 | Session Management | Session fixation or hijacking: session cookies not properly invalidated on logout | Low | High | logoutUser() revokes sessions; sessions revoked on password change; device cookie invalidation |
+| RISK-005 | MFA Bypass | MFA enrollment skipping or verification bypass when mfaRequired=true | Medium | High | Code requires MFA when mfaRequired and ALLOW_ADMIN_WITHOUT_MFA!=true; session checks enforce MFA |
+| RISK-006 | Rate Limit exhaustion | Login throttling bypass via multiple IP addresses | Low | Medium | Per-IP limits combined with per-account limits; device cookie tracking reduces ceiling for known browsers |
+| RISK-007 | Data Exposure | Sensitive information in error details or stack traces | Low | Medium | Error formatting in lib/errors.ts; generic user-facing messages; detailed errors only in dev mode |
+| RISK-008 | CSRF | Cross-site request forgery on state-changing endpoints | Low | Medium | Next.js built-in CSRF protection on forms; sameSite=lax on session cookies; device cookie verification |
+
+## Medium-Risk Areas
+
+| Risk ID | Category | Description | Likelihood | Impact | Mitigation |
+|---------|----------|-------------|------------|--------|------------|
+| RISK-010 | Input Validation | Malformed input causing server errors or unexpected behavior | Medium | Medium | Zod validation on forms; API route input validation; error boundaries in pages |
+| RISK-011 | Password Strength | No minimum complexity requirements on password creation | Low | Low | Password minimum 10 characters enforced; complexity could be added via config |
+| RISK-012 | Error Details | Server error details exposed to browser in development mode | Medium | Low | Error boundaries; development-only error disclosure; production hides details |
+| RISK-013 | Feature Flag Risk | Feature flags enabling/disabling features without proper authorization checks | Low | Medium | All feature flag access controlled via admin permissions; runtime checks in code |
+| RISK-014 | Permission Drift | Staff/manager permissions not properly revoked when role changed | Low | Medium | Code explicitly revokes permissions on role change (rbac.ts line 100); database state verified |
+| RISK-015 | Race Condition | Concurrent modifications to same member record | Low | Medium | Database constraints; application-level locking for critical operations; idempotent operations where possible |
+| RISK-016 | Upload Validation | File upload validation gaps (type, size, content) | Medium | High | Prisma/file storage validation; MIME type checking; size limits; virus scan not configured |
+| RISK-017 | Audit Gap | Critical actions not logged or incomplete audit trails | Low | Medium | Audit events logged on login, logout, MFA, password changes, role changes; periodic review |
+| RISK-018 | API Parameter Exposure | API endpoints accepting user-supplied IDs without ownership verification | Medium | Critical | All ID-based endpoints verify user owns the record or has admin role; path parameters validated |
+
+## Low-Risk Areas
+
+| Risk ID | Category | Description | Likelihood | Impact | Mitigation |
+|---------|----------|-------------|------------|--------|------------|
+| RISK-020 | UI/UX | Minor layout issues on certain viewport sizes | High | Low | Responsive testing at mobile/tablet/desktop; Tailwind CSS responsive utilities |
+| RISK-021 | Color Contrast | Text contrast may not meet WCAG AA in all themes | Medium | Low | Tailwind color palette designed for accessibility; verify with tools |
+| RISK-022 | Focus Management | Focus order could be improved in complex dialogs | Medium | Low | Tabindex management; focus-return after modals; visible focus rings |
+| RISK-023 | Internationalization | Nepali date converter and phone formatting may not handle all inputs | Medium | Low | Validation on input fields; edge case handling in phone normalization |
+| RISK-024 | Browser Differences | Minor JS differences between browser versions | Low | Low | Tested on latest Chromium; fallbacks in place for critical features |
+| RISK-025 | Third-Party Dependencies | Updates to @prisma/client, tailwindcss, or React may break functionality | Medium | Medium | Regular dependency updates; pin versions in package.json; integration tests |
+
+## Critical Fix Priority Order
+
+| Priority | Risk ID | Action | Owner | Target Date |
+|----------|---------|--------|-------|-------------|
+| P0 | RISK-001 | Implement server-side ownership verification on all ID-based endpoints | Backend lead | Sprint 1 |
+| P0 | RISK-002 | Add cross-user data isolation tests to CI/CD | QA lead | Sprint 1 |
+| P0 | RISK-005 | Ensure MFA is enforced when mfaRequired=true and ALLOW_ADMIN_WITHOUT_MFA not set | Auth team | Sprint 1 |
+| P1 | RISK-003 | Add login attempt monitoring and alerts | DevOps | Sprint 2 |
+| P1 | RISK-006 | Enhance rate limiting with IP reputation system | DevOps | Sprint 2 |
+| P1 | RISK-007 | Standardize error response format across all endpoints | Backend lead | Sprint 2 |
+| P2 | RISK-016 | Strengthen file upload validation (MIME, size, content scan) | Backend lead | Sprint 3 |
+| P2 | RISK-017 | Complete audit log coverage for all state-changing operations | Dev/Compliance | Sprint 3 |
+| P3 | RISK-010 | Add additional input validation edge cases | Frontend lead | Sprint 4 |
+| P3 | RISK-012 | Implement global error boundary with user-friendly messages | Frontend lead | Sprint 4 |
+| P4 | RISK-021 | Verify and fix color contrast ratios for all text combinations | Design lead | Sprint 4 |
+| P4 | RISK-022 | Improve focus management in multi-step forms | Accessibility lead | Sprint 4 |
+
+## Test Coverage Gaps
+
+| Gap ID | Description | Impact | Workaround |
+|--------|-------------|--------|------------|
+| GAP-001 | No test accounts for every possible permission combination | Medium | Test most common combinations; document gaps |
+| GAP-002 | Real password reset emails not sent (console transport only) | Low | Test reset link generation; verify token flow |
+| GAP-003 | Google OAuth not configured; flow cannot be completed | Low | Document as known limitation; test local login only |
+| GAP-004 | Marketplace purchases require real payment gateway | Low | Test browse and order creation with test gateway only |
+| GAP-005 | No test accounts for edge-case roles (e.g., staff with specific restricted permissions) | Medium | Document; test with default role permissions |
+| GAP-006 | Small gym owner (owner@yoganest.demo) has minimal seeded data | Low | Test with main gym owner; note data limitations |
+| GAP-007 | Vendor role has limited feature coverage in seed data | Low | Test vendor-specific functions; note limitations |
+| GAP-008 | No test for race conditions on concurrent modifications | Low | Document as known limitation; rely on database constraints |
+| GAP-008 | Accessibility testing without screen reader verification | Medium | Manual keyboard testing; outline for future A11y audit |
+| GAP-009 | Performance benchmarks not measured | Low | Document as out of scope; use Lighthouse for basic metrics |
+| GAP-010 | Cross-browser testing limited to Chromium only | Medium | Document; note Firefox/Safari may have differences |

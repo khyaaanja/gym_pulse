@@ -154,6 +154,9 @@ export default async function MemberPage({ params }: PageProps<"/app/members/[id
           {ctx.can("members.delete") && (
             <ActionButton variant="ghost" className="w-full text-risk" method="DELETE" endpoint={`/api/gym/members/${m.id}`} confirm={`Archive ${m.fullName}? They'll leave active lists; their history is kept.`} success="Member archived" redirectTo="/app/members">Archive member</ActionButton>
           )}
+          {m.archivedAt && ctx.can("members.edit") && (
+            <ActionButton variant="ghost" className="w-full text-ok" method="PATCH" endpoint={`/api/gym/members/${m.id}`} confirm={`Unarchive ${m.fullName}? They'll return to active lists.`} success="Member unarchived" redirectTo="/app/members">Unarchive member</ActionButton>
+          )}
         </div>
       </div>
     </div>

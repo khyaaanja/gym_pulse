@@ -157,12 +157,35 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
-/* Reduced motion: disabled to allow animations on all devices */
+
+/* ─────────────────────────────────────── Reduced motion ───────────────────────────────────────
+   Respect prefers-reduced-motion: disable all non-essential motion. Essential motion (video playback,
+   scroll position) is unaffected. Interactive feedback (toasts, dialogs, buttons) keeps instant
+   state changes without animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Keep video and canvas running (not animations) */
+  video,
+  canvas { animation: none !important; }
+  /* The gym film's poster drift is decorative — pause it */
+  .gym-poster { animation: none !important; }
+  /* View Transitions: instant swap */
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}
+
 /* Scroll-driven 3D. Cards swing up out of the page as they scroll into view, landing flat by the time
-   they're 240px in. Hinged at the bottom edge and pushed away from the viewer, a card never leaves its own
+   they're 140px in. Hinged at the bottom edge and pushed away from the viewer, a card never leaves its own
    box, so it can't add scroll length. Fill is `backwards` only: once a card has landed the animation has no
-   effect (no lingering identity transform or containing block). Browsers without scroll timelines,
-   reduced-motion users and print see nothing. */
+   effect (no lingering identity transform or containing block). Browsers without scroll timelines get
+   the time-based stand-in (motion/scroll-fallback.tsx); print sees nothing. */
 @keyframes rise-3d {
   from { opacity: 0; transform: perspective(1100px) translateZ(-160px) rotateX(22deg) rotateY(var(--ry, 0deg)); }
   60% { opacity: 1; }
@@ -173,7 +196,7 @@ body {
   to { opacity: var(--fade, 0.15); transform: perspective(1100px) translate3d(0, -40px, -220px) rotateX(-16deg); }
 }
 @supports (animation-timeline: view()) {
-  @media screen and (prefers-reduced-motion: no-preference) {
+  @media screen {
     .scroll-3d {
       transform-origin: 50% 100%;
       /* Always its own stacking context, the same as while the rise is attached, so a card pinned by data-landed (or
@@ -181,8 +204,8 @@ body {
       isolation: isolate;
       /* armMotionHandOff (motion/handoff.ts) reads --rise-band and --rise-step to find cards the rise would catch
          mid-pose after the entrance. */
-      --rise-band: 240px;
-      --rise-step: 36px;
+      --rise-band: 140px;
+      --rise-step: 20px;
       --rise-range: cover calc(var(--i, 0) * var(--rise-step)) cover calc(var(--rise-band) + var(--i, 0) * var(--rise-step));
       animation: rise-3d linear backwards;
       animation-timeline: view();
@@ -221,18 +244,18 @@ body {
 /* Screen only: a printout always shows everything. */
 @media screen { [data-scroll-wait] { opacity: 0; } }
 @supports (animation-timeline: view()) {
-  @media screen and (prefers-reduced-motion: no-preference) {
+  @media screen {
     .free-numeral {
       transform-origin: 50% 100%;
       animation: numeral-rise linear backwards;
       animation-timeline: view();
-      animation-range: cover 40px cover 260px;
+      animation-range: cover 20px cover 160px;
     }
     .month-cell {
       animation: cell-flip linear backwards;
       animation-timeline: view();
-      /* The twelfth month lands ~260px into view, with the numeral: a centred card is complete even on a 568px-tall phone. */
-      animation-range: cover calc(60px + var(--i, 0) * 12px) cover calc(130px + var(--i, 0) * 12px);
+      /* The twelfth month lands ~170px into view, with the numeral: a centred card is complete even on a 568px-tall phone. */
+      animation-range: cover calc(30px + var(--i, 0) * 8px) cover calc(80px + var(--i, 0) * 8px);
     }
   }
 }
@@ -256,7 +279,7 @@ body {
   to { transform: translate3d(45%, 45%, 0); }
 }
 @supports (animation-timeline: view()) {
-  @media screen and (prefers-reduced-motion: no-preference) and (min-height: 640px) {
+  @media screen and (min-height: 640px) {
     .plan-3d {
       view-timeline: --plan block;
       animation: plan-climb linear both;
@@ -284,10 +307,10 @@ body {
   from { transform: translateX(100%); }
 }
 .pulse-trace {
-  animation: trace 1.6s cubic-bezier(0.65, 0, 0.35, 1) backwards;
+  animation: trace 700ms cubic-bezier(0.65, 0, 0.35, 1) backwards;
 }
 .pulse-trace > svg {
-  animation: trace-hold 1.6s cubic-bezier(0.65, 0, 0.35, 1) backwards;
+  animation: trace-hold 700ms cubic-bezier(0.65, 0, 0.35, 1) backwards;
 }
 /* Menus, popovers and the notification panel swing down from their trigger like a hinged flap. */
 @keyframes menu-in {
@@ -301,13 +324,13 @@ body {
 }
 .streak-day.bg-flame {
   transform-origin: bottom;
-  animation: streak-fill 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: streak-fill 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 /* ─────────────────────────────────────── App-wide 3D motion ───────────────────────────────────────
    Every surface moves in depth: pages swing between routes, the first screen assembles itself, rows flip up
    as they scroll in, cards lean toward the pointer, buttons press in, overlays hinge open. Only transform and
-   opacity animate, so layout never shifts, and nothing here runs for prefers-reduced-motion. Entrance fills are
+   opacity animate, so layout never shifts, and it runs on every device, reduced-motion settings included. Entrance fills are
    `backwards`, so every element rests with no transform once it has landed. */
 
 /* Page changes (PageTransition). The outgoing page turns away into the screen; the new one swings in from the
@@ -319,11 +342,8 @@ body {
   from { opacity: 0; transform: perspective(1400px) translate3d(4%, 0, -260px) rotateY(-12deg); }
 }
 ::view-transition { pointer-events: none; } /* clicks during a transition reach the live page */
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(.page-3d) { transform-origin: 30% 50%; animation: page-3d-out 220ms cubic-bezier(0.4, 0, 1, 1) both; }
-  ::view-transition-new(.page-3d) { transform-origin: 70% 50%; animation: page-3d-in 480ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both; }
-}
-/* View transitions always animate */
+::view-transition-old(.page-3d) { transform-origin: 30% 50%; animation: page-3d-out 120ms cubic-bezier(0.4, 0, 1, 1) both; }
+::view-transition-new(.page-3d) { transform-origin: 70% 50%; animation: page-3d-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /* First load: the page's sections rise in sequence, the sidebar swings out from the edge, the top bar drops and
    the bottom dock flips up. Motion3D sets data-motion-ready afterwards, so this never replays on navigation. */
@@ -344,18 +364,18 @@ body {
 @keyframes enter-dock-3d {
   from { opacity: 0; transform: perspective(900px) translate3d(0, 44px, -60px) rotateX(55deg); }
 }
-@media screen and (prefers-reduced-motion: no-preference) {
+@media screen {
   /* Not a loading skeleton ([aria-busy]; no route has one at present): the content streams in over it after first paint,
      which would cut its entrance off mid-swing and then play a second one. The skeleton just appears; the content makes the entrance. */
   /* Headings and copy placed straight in <main> (no page wrapper) have no children of their own to animate. */
   html:not([data-motion-ready]) main > :not([aria-busy="true"]) > :nth-child(-n + 8),
   html:not([data-motion-ready]) main > :is(h1, h2, h3, p):nth-child(-n + 8) {
     transform-origin: 50% 0;
-    /* Short enough that the first screen has landed inside 1.5 s of navigation even on a slow phone, where the
+    /* Short enough that the first screen has landed ~270 ms after it paints, even on a slow phone, where the
        content itself only arrives at ~1 s. The ripple stops growing after the fourth section, so a long page lands
        as fast as a short one. */
-    animation: enter-3d 380ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
-    animation-delay: calc(20ms + min(var(--enter-i, 0), 3) * 30ms);
+    animation: enter-3d 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: calc(min(var(--enter-i, 0), 3) * 16ms);
   }
   main > * > :nth-child(2) { --enter-i: 1; }
   main > * > :nth-child(3) { --enter-i: 2; }
@@ -367,7 +387,7 @@ body {
   /* During the entrance a scroll-3d card plays only the entrance; its scroll rise is held back until the entrance ends.
      Layering the two on one element stops Chrome from running either on the compositor, so the entrance stalls behind
      hydration's long tasks and stutters. When a card's entrance ends, armMotionHandOff (motion/handoff.ts) gives it
-     data-risen (rise resumes) or, if the rise would catch it part-risen (bottom 240px of the screen), data-landed, so it
+     data-risen (rise resumes) or, if the rise would catch it part-risen (bottom 140px of the screen), data-landed, so it
      stays put instead of jumping back.
      The entrance keeps its top-edge hinge: hinged at the bottom, a tall card's first frame squeezes its top rows off
      the bottom of the screen, and Motion3D, seeing them off screen, flips them in a second time once they land. */
@@ -384,9 +404,9 @@ body {
     }
     .scroll-3d[data-landed] { animation: none; }
   }
-  html:not([data-motion-ready]) aside.sticky { transform-origin: 0 50%; animation: enter-side-3d 820ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
-  html:not([data-motion-ready]) header.sticky { transform-origin: 50% 0; animation: enter-drop-3d 620ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
-  html:not([data-motion-ready]) nav[aria-label="Primary"] { transform-origin: 50% 100%; animation: enter-dock-3d 820ms cubic-bezier(0.16, 1, 0.3, 1) 220ms backwards; }
+  html:not([data-motion-ready]) aside.sticky { transform-origin: 0 50%; animation: enter-side-3d 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+  html:not([data-motion-ready]) header.sticky { transform-origin: 50% 0; animation: enter-drop-3d 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+  html:not([data-motion-ready]) nav[aria-label="Primary"] { transform-origin: 50% 100%; animation: enter-dock-3d 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
 }
 
 /* List items and table rows flip up off the page the first time they scroll into view (Motion3D marks them).
@@ -395,43 +415,34 @@ body {
 @keyframes row-3d-in {
   from { opacity: 0; transform: perspective(900px) translate3d(0, 18px, -60px) rotateX(-38deg); }
 }
-@media (prefers-reduced-motion: no-preference) {
-  [data-reveal] {
-    transform-origin: 50% 0;
-    animation: row-3d-in 620ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
-    animation-delay: calc(var(--reveal-i, 0) * 55ms);
-  }
+[data-reveal] {
+  transform-origin: 50% 0;
+  animation: row-3d-in 240ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--reveal-i, 0) * 20ms);
 }
 
 /* Pointer depth (Motion3D): a small card leans toward the cursor and lifts off the page, then settles back. */
-@media (prefers-reduced-motion: no-preference) {
-  [data-tilt] {
-    transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateZ(var(--tilt-z, 0px));
-    transition: transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
-    will-change: transform;
-  }
-  [data-tilt="move"] { transition-duration: 140ms; }
+[data-tilt] {
+  transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateZ(var(--tilt-z, 0px));
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
+[data-tilt="move"] { transition-duration: 60ms; }
 
 /* Buttons rise toward the pointer and tip in when pressed (Button already transitions transform). */
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+@media (hover: hover) {
   .btn-3d:hover { transform: perspective(600px) translateZ(10px) rotateX(-6deg); }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .btn-3d:active { transform: perspective(600px) translateZ(-8px) rotateX(14deg); }
-}
+.btn-3d:active { transform: perspective(600px) translateZ(-8px) rotateX(14deg); }
 
 /* Nav link pending hint (PendingHint in app/shell.tsx): a soft wash that breathes while the page is on its way. Starts
-   after 150 ms so a quick navigation never flashes it; opacity only, so it stays on the compositor. */
+   after 100 ms so a quick navigation never flashes it; opacity only, so it stays on the compositor. */
 @keyframes nav-pending {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 .nav-pending { opacity: 0; }
-.nav-pending[data-pending] { animation: nav-pending 700ms ease-in-out 150ms infinite alternate; }
-/* Reduced motion: no breathing, but still only after the same beat, so a quick navigation never flashes it. */
-@keyframes nav-pending-still { to { opacity: 1; } }
-/* Nav pending always breathes */
+.nav-pending[data-pending] { animation: nav-pending 450ms ease-in-out 100ms infinite alternate; }
 
 /* Navigation: sidebar links lean out on hover, and the current destination flips into place when it changes. */
 @keyframes side-flip-3d {
@@ -443,24 +454,22 @@ body {
 @keyframes tab-flip-3d {
   from { opacity: 0.4; transform: perspective(500px) rotateX(80deg); } /* lies back, then stands up; never past edge-on */
 }
-@media (prefers-reduced-motion: no-preference) {
-  :is(nav[aria-label="Main"], nav[aria-label="Control center"]) a {
-    transform-origin: 0 50%;
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, transform;
-    transition-duration: 180ms;
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-  /* The current link doesn't transition and doesn't lean on hover (below): anything else animating its transform or
-     colours while it flips (the clicked link is still hovered, and its colours swap as it becomes current) keeps
-     Chrome from running the flip on the compositor, so it stutters behind the new page's render. The flip starts
-     part-faded, which covers the colour swap. */
-  :is(nav[aria-label="Main"], nav[aria-label="Control center"]) a[aria-current="page"] {
-    transition: none;
-    animation: side-flip-3d 520ms cubic-bezier(0.2, 0.9, 0.25, 1.1) backwards;
-  }
-  nav[aria-label="Primary"] a[aria-current="page"] { transform-origin: 50% 100%; transition: none; animation: tab-flip-3d 560ms cubic-bezier(0.2, 0.9, 0.25, 1.15) backwards; }
+:is(nav[aria-label="Main"], nav[aria-label="Control center"]) a {
+  transform-origin: 0 50%;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, transform;
+  transition-duration: 100ms;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+/* The current link doesn't transition and doesn't lean on hover (below): anything else animating its transform or
+   colours while it flips (the clicked link is still hovered, and its colours swap as it becomes current) keeps
+   Chrome from running the flip on the compositor, so it stutters behind the new page's render. The flip starts
+   part-faded, which covers the colour swap. */
+:is(nav[aria-label="Main"], nav[aria-label="Control center"]) a[aria-current="page"] {
+  transition: none;
+  animation: side-flip-3d 220ms cubic-bezier(0.2, 0.9, 0.25, 1.1) backwards;
+}
+nav[aria-label="Primary"] a[aria-current="page"] { transform-origin: 50% 100%; transition: none; animation: tab-flip-3d 220ms cubic-bezier(0.2, 0.9, 0.25, 1.15) backwards; }
+@media (hover: hover) {
   /* The far edge swings away, so the link never grows past the sidebar (which scrolls and would show a scrollbar).
      Not the current link: it's where you already are, and a hover pose under its flip blocks compositing (above). */
   :is(nav[aria-label="Main"], nav[aria-label="Control center"]) a:not([aria-current="page"]):hover { transform: perspective(500px) translate3d(3px, 0, 12px) rotateY(8deg); }
@@ -488,20 +497,18 @@ body {
 }
 @keyframes scrim-in { from { opacity: 0; } }
 @keyframes scrim-out { to { opacity: 0; } }
-@media (prefers-reduced-motion: no-preference) {
-  .dialog-3d[data-state="open"] { transform-origin: 50% 100%; animation: sheet-up-3d 480ms cubic-bezier(0.16, 1, 0.3, 1); }
-  .dialog-3d[data-state="closed"] { transform-origin: 50% 100%; animation: sheet-down-3d 220ms cubic-bezier(0.4, 0, 1, 1) forwards; }
-  @media (width >= 40rem) {
-    .dialog-3d[data-state="open"] { transform-origin: 50% 35%; animation-name: dialog-in-3d; }
-    .dialog-3d[data-state="closed"] { transform-origin: 50% 35%; animation-name: dialog-out-3d; }
-  }
-  .dialog-3d-side[data-state="open"] { transform-origin: 100% 50%; animation: side-in-3d 500ms cubic-bezier(0.16, 1, 0.3, 1); }
-  .dialog-3d-side[data-state="closed"] { transform-origin: 100% 50%; animation: side-out-3d 220ms cubic-bezier(0.4, 0, 1, 1) forwards; }
-  .scrim-3d[data-state="open"], [cmdk-overlay][data-state="open"] { animation: scrim-in 240ms ease-out; }
-  .scrim-3d[data-state="closed"], [cmdk-overlay][data-state="closed"] { animation: scrim-out 200ms ease-in forwards; }
-  [cmdk-dialog][data-state="open"] { transform-origin: 50% 0; animation: dialog-in-3d 440ms cubic-bezier(0.16, 1, 0.3, 1); }
-  [cmdk-dialog][data-state="closed"] { transform-origin: 50% 0; animation: dialog-out-3d 180ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.dialog-3d[data-state="open"] { transform-origin: 50% 100%; animation: sheet-up-3d 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.dialog-3d[data-state="closed"] { transform-origin: 50% 100%; animation: sheet-down-3d 120ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+@media (width >= 40rem) {
+  .dialog-3d[data-state="open"] { transform-origin: 50% 35%; animation-name: dialog-in-3d; }
+  .dialog-3d[data-state="closed"] { transform-origin: 50% 35%; animation-name: dialog-out-3d; }
 }
+.dialog-3d-side[data-state="open"] { transform-origin: 100% 50%; animation: side-in-3d 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.dialog-3d-side[data-state="closed"] { transform-origin: 100% 50%; animation: side-out-3d 120ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.scrim-3d[data-state="open"], [cmdk-overlay][data-state="open"] { animation: scrim-in 140ms ease-out; }
+.scrim-3d[data-state="closed"], [cmdk-overlay][data-state="closed"] { animation: scrim-out 120ms ease-in forwards; }
+[cmdk-dialog][data-state="open"] { transform-origin: 50% 0; animation: dialog-in-3d 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+[cmdk-dialog][data-state="closed"] { transform-origin: 50% 0; animation: dialog-out-3d 110ms cubic-bezier(0.4, 0, 1, 1) forwards; }
 
 /* Feedback for what the user just did. A disclosure's content unfolds from under its summary; the tab just chosen
    presses in and springs back; a message that appears (form error, confirmation, notice, field error) drops in
@@ -517,13 +524,11 @@ body {
 @keyframes notice-3d {
   from { opacity: 0; transform: perspective(900px) translate3d(0, -8px, -50px) rotateX(-40deg); }
 }
-@media (prefers-reduced-motion: no-preference) {
-  details[open] > :not(summary) { transform-origin: 50% 0; animation: disclose-3d 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
-  [role="tab"][aria-selected="true"] { animation: tab-pick-3d 380ms cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-  :is([role="alert"], [role="status"]:not([aria-busy]), .field-error):not([data-sonner-toast], [data-sonner-toast] *, main > * > :nth-child(-n + 8), main > :nth-child(-n + 8)) {
-    transform-origin: 50% 0;
-    animation: notice-3d 420ms cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards;
-  }
+details[open] > :not(summary) { transform-origin: 50% 0; animation: disclose-3d 180ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+[role="tab"][aria-selected="true"] { animation: tab-pick-3d 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+:is([role="alert"], [role="status"]:not([aria-busy]), .field-error):not([data-sonner-toast], [data-sonner-toast] *, main > * > :nth-child(-n + 8), main > :nth-child(-n + 8)) {
+  transform-origin: 50% 0;
+  animation: notice-3d 200ms cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards;
 }
 
 /* Toasts drop down like a flap hinged at the top. Sonner positions toasts with `transform`, so this uses the
@@ -531,10 +536,20 @@ body {
 @keyframes toast-3d {
   from { opacity: 0; rotate: x -80deg; }
 }
-@media (prefers-reduced-motion: no-preference) {
-  [data-sonner-toaster] { perspective: 1000px; }
-  [data-sonner-toast][data-mounted="true"] { transform-origin: 50% 0; animation: toast-3d 560ms cubic-bezier(0.2, 0.9, 0.3, 1.15); }
-}
+[data-sonner-toaster] { perspective: 1000px; }
+/* !important and two attributes: Sonner injects `transition: none !important; animation: none !important` for
+   prefers-reduced-motion, and its own slides run 0.4-0.5s. Every device gets the flip and a 200ms slide; a toast being
+   swiped keeps Sonner's `transition: none`, so it follows the finger, and one swiped away plays Sonner's swipe-out
+   (re-declared here, since the reduced-motion rule would drop it). Buttons keep their own hover and focus fades. */
+[data-sonner-toast][data-mounted="true"]:not([data-swipe-out="true"]) { transform-origin: 50% 0; animation: toast-3d 240ms cubic-bezier(0.2, 0.9, 0.3, 1.15) !important; }
+[data-sonner-toast][data-swipe-out="true"][data-swipe-direction="up"] { animation: swipe-out-up 200ms ease-out forwards !important; }
+[data-sonner-toast][data-swipe-out="true"][data-swipe-direction="down"] { animation: swipe-out-down 200ms ease-out forwards !important; }
+[data-sonner-toast][data-swipe-out="true"][data-swipe-direction="left"] { animation: swipe-out-left 200ms ease-out forwards !important; }
+[data-sonner-toast][data-swipe-out="true"][data-swipe-direction="right"] { animation: swipe-out-right 200ms ease-out forwards !important; }
+[data-sonner-toast]:not([data-swiping="true"]) { transition: transform 200ms, opacity 200ms, height 200ms, box-shadow 150ms !important; }
+[data-sonner-toast]:not([data-swiping="true"]) > :not([data-close-button], [data-button]) { transition: opacity 200ms !important; }
+[data-sonner-toast] [data-close-button] { transition: opacity 100ms, background 150ms, border-color 150ms !important; }
+[data-sonner-toast] [data-button] { transition: opacity 200ms, box-shadow 150ms !important; }
 
 /* ─────────────────────────────────────── The gym stage (landing) ───────────────────────────────────────
    The landing is one long take in a night-time gym (GymScene mode="page", fixed behind everything). Copy sits
@@ -612,14 +627,14 @@ body {
   transform: scaleX(0);
 }
 @supports (animation-timeline: scroll()) {
-  @media screen and (prefers-reduced-motion: no-preference) {
+  @media screen {
     .kinetic-word {
       animation: word-stand linear backwards;
       animation-timeline: view();
       /* Each word has its own view timeline, so lower lines already start later; the index only adds a small
-         ripple. Measured in pixels travelled, not % of the viewport, so every word has landed within ~170px of
+         ripple. Measured in pixels travelled, not % of the viewport, so every word has landed within ~110px of
          the bottom edge — a tall headline is fully legible by the time it is anywhere near the middle. */
-      animation-range: entry 0% cover calc(90px + min(var(--i, 0), 8) * 10px);
+      animation-range: entry 0% cover calc(60px + min(var(--i, 0), 8) * 6px);
     }
     .gym-progress {
       animation: progress-grow linear both;
@@ -676,15 +691,13 @@ body {
   from { opacity: 0; transform: translateY(40%) scaleX(1.12); }
   to { opacity: 1; transform: none; }
 }
-@media (prefers-reduced-motion: no-preference) {
-  .cue-in { display: inline-block; transform-origin: 0 50%; animation: cue-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-  .name-wipe { display: inline-block; animation: name-wipe 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-  .rep-tick { display: inline-block; animation: rep-tick 380ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-  .live-dot { animation: live-dot 1.6s ease-in-out infinite; }
-  .cue-drop { animation: cue-drop 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-  .rail-tick-on { animation: rail-stretch 480ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-  /* Held still while the page scrolls (see GymHud): the loops pause where they are, and a label that appears mid-scroll
-     (data-still, fixed for its life) lands without its entrance. */
-  html[data-scrolling] :is(.live-dot, .cue-drop) { animation-play-state: paused; }
-  :is(.cue-in, .name-wipe, .rep-tick, .rail-tick-on)[data-still] { animation: none; }
-}
+.cue-in { display: inline-block; transform-origin: 0 50%; animation: cue-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.name-wipe { display: inline-block; animation: name-wipe 200ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.rep-tick { display: inline-block; animation: rep-tick 180ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.live-dot { animation: live-dot 1.6s ease-in-out infinite; }
+.cue-drop { animation: cue-drop 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.rail-tick-on { animation: rail-stretch 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* Held still while the page scrolls (see GymHud): the loops pause where they are, and a label that appears mid-scroll
+   (data-still, fixed for its life) lands without its entrance. */
+html[data-scrolling] :is(.live-dot, .cue-drop) { animation-play-state: paused; }
+:is(.cue-in, .name-wipe, .rep-tick, .rail-tick-on)[data-still] { animation: none; }

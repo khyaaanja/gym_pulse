@@ -42,7 +42,7 @@ export async function OwnerDashboard({ ctx, range }: { ctx: GymContext; range: s
       <PageHeader title={`Good ${localHour(new Date(), ctx.gym.timezone) < 12 ? "morning" : localHour(new Date(), ctx.gym.timezone) < 17 ? "afternoon" : "evening"}, ${ctx.user.name.split(" ")[0]}`} description={`${ctx.gym.name} at a glance.`} actions={<RangeTabs current={range} base="/app" />} />
 
       <div className="grid-cols-1 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/app/pulse" className="bg-dusk group relative isolate overflow-hidden rounded-[var(--radius-card)] p-6 text-white shadow-lift ring-1 ring-white/5 transition-transform duration-200 hover:-translate-y-0.5 sm:col-span-2 lg:col-span-1 lg:row-span-2">
+        <Link href="/app/pulse" className="bg-dusk group relative isolate overflow-hidden rounded-[var(--radius-card)] p-6 text-white shadow-lift ring-1 ring-white/5 transition-transform duration-150 hover:-translate-y-0.5 sm:col-span-2 lg:col-span-1 lg:row-span-2">
           <GymScene mode="panel" priority className="absolute inset-0 -z-10 opacity-90" />
           <div aria-hidden className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgb(10_8_18/0.7)_0%,rgb(10_8_18/0.1)_45%,rgb(10_8_18/0.85)_100%)]" />
           <p className="text-[15px] opacity-80">Revenue at risk</p>

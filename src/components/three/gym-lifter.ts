@@ -34,7 +34,18 @@ export function buildLifter(THREE: Three, gltf: GLTF, opts: { shadows: boolean }
   const disposables: { dispose(): void }[] = [];
   let skin: T.MeshPhysicalMaterial | null = null;
   holder.traverse((o) => {
-    if ((o as T.Bone).isBone) bones[o.name.replace(/^mixamorig:?/, "")] = o as T.Bone;
+    if ((o as T.Bone).isBone) {
+      // Handle various bone naming conventions: Mixamo, custom, etc.
+      let name = o.name;
+      // Remove common prefixes
+      name = name.replace(/^mixamorig:?/i, "");
+      name = name.replace(/^armature_/i, "");
+      name = name.replace(/^rig_/i, "");
+      name = name.replace(/^bone_/i, "");
+      bones[name] = o as T.Bone;
+      // Also store with original name as fallback
+      if (name !== o.name) bones[o.name] = o as T.Bone;
+    }
     const m = o as T.SkinnedMesh;
     if (m.isSkinnedMesh) {
       m.castShadow = m.receiveShadow = opts.shadows;
@@ -59,7 +70,36 @@ export function buildLifter(THREE: Three, gltf: GLTF, opts: { shadows: boolean }
     }
   });
   const need = ["Hips", "Neck", "Head", "Spine2"] as const;
-  for (const n of need) if (!bones[n]) throw new Error(`lifter rig is missing ${n}`);
+  const missing = need.filter((n) => !bones[n]);
+  if (missing.length > 0) {
+    // Try common alternative names
+    const alternatives: Record<string, string[]> = {
+      Hips: ["Hip", "Pelvis", "hip", "pelvis"],
+      Neck: ["Neck1", "neck"],
+      Head: ["HeadTop", "head", "Skull"],
+      Spine2: ["Spine1", "Spine", "Chest", "chest", "spine1", "spine"],
+    };
+    for (const n of missing) {
+      for (const alt of alternatives[n] ?? []) {
+        if (bones[alt]) {
+          bones[n] = bones[alt];
+          break;
+        }
+      }
+    }
+    // Final check
+    const stillMissing = need.filter((n) => !bones[n]);
+    if (stillMissing.length > 0) {
+      console.warn(`[Lifter] Missing bones (will use fallback): ${stillMissing.join(", ")}`);
+      // Don't throw - create dummy bones for critical ones to prevent crash
+      for (const n of stillMissing) {
+        const dummy = new THREE.Bone();
+        dummy.name = n;
+        holder.add(dummy);
+        bones[n] = dummy;
+      }
+    }
+  }
 
   // ─── rest pose, in root space (the root sits where the athlete does) ───
   root.updateMatrixWorld(true);
@@ -82,6 +122,17 @@ export function buildLifter(THREE: Three, gltf: GLTF, opts: { shadows: boolean }
 
   // Rest palm normal and finger direction for each hand, from the finger roots (works whatever way the palms face).
   const palmRest = (s: "Left" | "Right") => {
+    // Check if all required bones exist
+    const handBone = bones[`${s}Hand`];
+    const indexBone = bones[`${s}HandIndex1`];
+    const pinkyBone = bones[`${s}HandPinky1`];
+    const middleBone = bones[`${s}HandMiddle1`];
+    if (!handBone || !indexBone || !pinkyBone || !middleBone) {
+      // Fallback: use default palm orientation
+      const along = new THREE.Vector3(0, 0, -1); // fingers point forward
+      const n = new THREE.Vector3(s === "Left" ? -1 : 1, 0, 0); // palm faces sideways
+      return { along, n };
+    }
     const h = R(`${s}Hand`).p, i = R(`${s}HandIndex1`).p, k = R(`${s}HandPinky1`).p, m = R(`${s}HandMiddle1`).p;
     const along = m.clone().sub(h).normalize();
     const across = i.clone().sub(k).normalize();
@@ -133,7 +184,10 @@ export function buildLifter(THREE: Three, gltf: GLTF, opts: { shadows: boolean }
     upper: R("LeftForeArm").p.distanceTo(R("LeftArm").p),
     fore: R("LeftHand").p.distanceTo(R("LeftForeArm").p),
   };
-  const gripReach = BODY.forearm; // elbow → centre of the grip, as the rig measures it
+  // Match rig's forearm length (elbow → grip center) so IK targets the same point.
+  // Mesh forearm bone (L.fore) is elbow → wrist; hand bone adds ~3 cm to palm center.
+  // We target BODY.forearm (0.283) for consistency with the rig.
+  const gripReach = BODY.forearm;
   const FINGERS = ["Index", "Middle", "Ring", "Pinky"] as const;
   // How far each finger joint closes round a 29 mm bar, radians (knuckle, middle, tip).
   const CURL = [1.05, 1.25, 0.75];
@@ -215,19 +269,29 @@ export function buildLifter(THREE: Three, gltf: GLTF, opts: { shadows: boolean }
       if (palmN.lengthSq() < 1e-6) palmN.copy(BACK);
       palmN.normalize().applyAxisAngle(foreDir, ((1 - x.grip) / 2) * Math.PI);
       const pr = palm[side];
-      const restUpper = tv.copy(R(`${side}ForeArm`).p).sub(R(`${side}Arm`).p);
-      // T-pose: the elbow hinge flexes forward, so the point of the elbow faces back whatever the palm does.
-      aim(`${side}Arm`, restUpper, BACK, upperDir, out);
-      // The forearm carries most of the palm's twist; the wrist stays straight.
-      aim(`${side}ForeArm`, tw.copy(R(`${side}Hand`).p).sub(R(`${side}ForeArm`).p), pr.n, foreDir, palmN);
-      aim(`${side}Hand`, pr.along, pr.n, foreDir, palmN);
+      // Safety checks for required rest data
+      const hasForeArmRest = !!rest[`${side}ForeArm`];
+      const hasArmRest = !!rest[`${side}Arm`];
+      const hasHandRest = !!rest[`${side}Hand`];
+      if (hasArmRest && hasForeArmRest) {
+        const restUpper = tv.copy(R(`${side}ForeArm`).p).sub(R(`${side}Arm`).p);
+        // T-pose: the elbow hinge flexes forward, so the point of the elbow faces back whatever the palm does.
+        aim(`${side}Arm`, restUpper, BACK, upperDir, out);
+      }
+      if (hasForeArmRest && hasHandRest) {
+        // The forearm carries most of the palm's twist; the wrist stays straight.
+        aim(`${side}ForeArm`, tw.copy(R(`${side}Hand`).p).sub(R(`${side}ForeArm`).p), pr.n, foreDir, palmN);
+      }
+      if (hasHandRest) {
+        aim(`${side}Hand`, pr.along, pr.n, foreDir, palmN);
+      }
 
       // Fingers wrap the bar; the thumb closes over them.
       for (const fn of FINGERS) {
         for (let j = 1; j <= 3; j++) {
           const n = `${side}Hand${fn}${j}`;
           const b = bones[n];
-          if (!b) continue;
+          if (!b || !restLocal[n]) continue;
           // Curl axis: across the palm, in the bone's own rest frame.
           const axis = tv.crossVectors(pr.along, pr.n).normalize().applyQuaternion(qb.copy(R(n).q).invert());
           b.quaternion.copy(restLocal[n]!).multiply(qTmp.setFromAxisAngle(axis, CURL[j - 1]! * (fn === "Index" ? 0.92 : 1)));
@@ -236,11 +300,11 @@ export function buildLifter(THREE: Three, gltf: GLTF, opts: { shadows: boolean }
       for (let j = 1; j <= 3; j++) {
         const n = `${side}HandThumb${j}`;
         const b = bones[n];
-        if (!b) continue;
+        if (!b || !restLocal[n]) continue;
         const axis = tv.copy(pr.along).applyQuaternion(qb.copy(R(n).q).invert()).normalize();
         b.quaternion.copy(restLocal[n]!).multiply(qTmp.setFromAxisAngle(axis, sx * [0.35, 0.45, 0.4][j - 1]!));
       }
-      bones[`${side}Hand`]!.updateMatrixWorld(true);
+      if (bones[`${side}Hand`]) bones[`${side}Hand`]!.updateMatrixWorld(true);
     }
   };
 

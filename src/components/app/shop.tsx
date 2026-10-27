@@ -73,7 +73,7 @@ export function Shop({ items, categories, providers, symbol, focus }: { items: S
             ) : (
               ((a) => (
                 <div className={cn("relative grid aspect-[4/3] place-items-center overflow-hidden", a.tint)} aria-hidden>
-                  <a.Icon className="size-10 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.6} />
+                  <a.Icon className="size-10 transition-transform duration-150 group-hover:scale-110" strokeWidth={1.6} />
                   <a.Icon className="absolute -bottom-6 -right-6 size-28 opacity-10" strokeWidth={1.2} />
                 </div>
               ))(art(i.category, i.name, i.kind))

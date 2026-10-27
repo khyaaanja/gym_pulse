@@ -6,7 +6,7 @@ export function Metric({ label, value, period, definition, trend, estimate, clas
   const Comp = href ? "a" : "div";
   return (
     // The first-load hand-off script (motion/handoff.ts) may add data-risen/data-landed before hydration.
-    <Comp href={href} suppressHydrationWarning className={cn("scroll-3d group block rounded-[var(--radius-card)] bg-surface p-5 shadow-card ring-1 ring-line/70", href && "transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-lift", className)}>
+    <Comp href={href} suppressHydrationWarning className={cn("scroll-3d group block rounded-[var(--radius-card)] bg-surface p-5 shadow-card ring-1 ring-line/70", href && "transition-[box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:shadow-lift", className)}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-ink-2">{label}</p>
         {estimate && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-ink-3">Estimate</span>}

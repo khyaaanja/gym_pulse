@@ -55,7 +55,7 @@ export function GymHud() {
       <div className="fixed inset-x-0 top-0 z-30 h-[3px]">
         <div className="gym-progress h-full bg-[linear-gradient(90deg,#ff4f98,#ffb454)] shadow-[0_0_12px_rgb(255_79_152/0.8)]" />
       </div>
-      <div className={`fixed bottom-3 left-3 z-20 transition-[opacity,transform] duration-500 sm:bottom-7 sm:left-7 ${shown ? "opacity-100" : "translate-y-3 opacity-0"}`}>
+      <div className={`fixed bottom-3 left-3 z-20 transition-[opacity,transform] duration-250 sm:bottom-7 sm:left-7 ${shown ? "opacity-100" : "translate-y-3 opacity-0"}`}>
         <div className="hud-card flex items-center gap-2.5 rounded-2xl py-2 pl-3 pr-2 text-white sm:gap-3 sm:py-2.5 sm:pl-4">
           <span className="live-dot size-2 shrink-0 rounded-full bg-[#ff4f98] shadow-[0_0_10px_#ff4f98]" />
           <span className="hidden text-[11px] font-semibold tracking-[0.18em] text-white/60 sm:inline">SET {String((s?.chapter ?? 0) + 1).padStart(2, "0")}</span>
@@ -98,7 +98,7 @@ export function GymHud() {
         </div>
       </div>
       {s && s.chapters > 1 && (
-        <div className={`fixed right-4 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-end gap-2.5 transition-opacity duration-500 md:flex ${away ? "opacity-0" : ""}`}>
+        <div className={`fixed right-4 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-end gap-2.5 transition-opacity duration-250 md:flex ${away ? "opacity-0" : ""}`}>
           {Array.from({ length: s.chapters }, (_, i) => (
             // Keyed by state, so a tick that changes is a new element that stretches in (a transform the compositor runs):
             // a height transition laid out and repainted the rail on every frame of it.

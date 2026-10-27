@@ -1,0 +1,227 @@
+# GymPulse API Inventory
+
+## User Authentication API Endpoints
+
+| Endpoint | Method | Description | Auth Required |
+|----------|--------|-------------|---------------|
+| `/api/auth/login` | POST | User login with email/phone + password | No (rate limited) |
+| `/api/auth/mfa/verify` | POST | Verify 6-digit TOTP code | User session |
+| `/api/auth/signup` | POST | Create new gym (onboarding) | No |
+| `/api/auth/password/forgot` | POST | Request password reset link | No |
+| `/api/auth/password/reset` | POST | Set new password with token | No (token validated) |
+
+## Admin Authentication API Endpoints
+
+| Endpoint | Method | Description | Auth Required |
+|----------|--------|-------------|---------------|
+| `/api/admin/auth/login` | POST | Platform admin login | No (rate limited) |
+| `/api/admin/auth/mfa/verify` | POST | Verify admin TOTP code | Admin session |
+
+## User Application API Endpoints
+
+### Members
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/members` | GET | List members with pagination, filtering, sorting |
+| `/api/members/[id]` | GET | Get single member profile |
+| `/api/members` | POST | Create new member |
+| `/api/members/[id]` | PUT | Update member profile |
+| `/api/members/[id]` | DELETE | Archive/remove member |
+
+### Attendance
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/attendance` | GET | List attendance records with filters |
+| `/api/attendance` | POST | Create new check-in (QR or manual) |
+| `/api/attendance/[id]` | GET | Get single attendance record |
+
+### Check-in
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/checkin/[token]` | GET | Get QR code for check-in |
+| `/api/checkin/verify` | POST | Verify check-in with token |
+
+### Marketplace
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/marketplace` | GET | List marketplace products by category |
+| `/api/marketplace/[id]` | GET | Get single product detail |
+| `/api/orders` | POST | Create new marketplace order |
+| `/api/orders/[id]` | GET | Get order detail |
+| `/api/orders/[id]/pay` | POST | Process payment for order |
+
+### Payments
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/payments` | GET | List payments with filters |
+| `/api/payments/[id]` | GET | Get single payment detail |
+| `/api/payments` | POST | Create new payment record |
+| `/api/payments/[id]/refund` | POST | Process refund |
+
+### Reports & Analytics
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/reports` | GET | List available reports |
+| `/api/reports/[reportType]` | GET | Get report data |
+| `/api/predictions` | GET | Churn prediction data |
+| `/api/risk-assessments` | GET | Member risk assessments |
+
+### Notifications
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/notifications` | GET | List notifications for user/member |
+| `/api/notifications` | POST | Send notification (admin) |
+| `/api/notifications/[id]/read` | POST | Mark notification as read |
+
+### Settings
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/settings` | GET | Get gym settings |
+| `/api/settings` | PUT | Update gym settings |
+| `/api/staff` | GET | List staff members |
+| `/api/staff` | POST | Add new staff member |
+| `/api/staff/[id]` | PUT | Update staff role/permissions |
+| `/api/staff/[id]` | DELETE | Remove staff member |
+
+### Imports
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/imports` | POST | Create new import job |
+| `/api/imports/[id]` | GET | Get import job status |
+| `/api/imports/[id]/rows` | GET | Get import rows |
+| `/api/imports/[id]/rows` | PUT | Update row action (accept/reject) |
+
+### Subscriptions
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/subscription` | GET | Get current gym subscription |
+| `/api/subscription/plans` | GET | List available SaaS plans |
+
+## Super-Admin API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/platform/admins` | GET | List all platform admins |
+| `/api/platform/admins` | POST | Create new platform admin |
+| `/api/platform/admins/[id]` | PUT | Update admin role/MFA |
+| `/api/platform/admins/[id]` | DELETE | Revoke admin access |
+| `/api/platform/gyms` | GET | List all gyms |
+| `/api/platform/gyms/[id]` | GET | Get gym detail |
+| `/api/platform/gyms` | POST | Create new gym |
+| `/api/platform/gyms/[id]` | PUT | Update gym |
+| `/api/platform/gyms/[id]` | DELETE | Suspend/archive gym |
+| `/api/platform/feature-flags` | GET | List all feature flags |
+| `/api/platform/feature-flags/[key]` | PUT | Update feature flag |
+| `/api/platform/automations` | GET | List automation rules |
+| `/api/platform/automations` | POST | Create automation rule |
+| `/api/platform/audit-logs` | GET | View audit log entries |
+| `/api/platform/billing` | GET | Platform billing/subscription info |
+| `/api/platform/vendors` | GET | List all vendors |
+| `/api/platform/vendors/[id]` | GET | Get vendor detail |
+
+## API Response Codes
+
+| Status Code | Meaning |
+|-------------|---------|
+| 200 | OK - successful request |
+| 201 | Created - new resource created |
+| 400 | Bad Request - invalid input, validation failure |
+| 401 | Unauthenticated - missing or invalid session |
+| 403 | Forbidden - authenticated but insufficient permissions |
+| 422 | Unprocessable Entity - validation errors |
+| 429 | Too Many Requests - rate limit exceeded |
+| 500 | Internal Server Error - unexpected error |
+
+## Request Validation
+
+### Common Validation Rules
+
+- **Email**: Must be valid email format or match phone pattern
+- **Password**: Minimum 10 characters (no complexity requirements in code)
+- **Identifier**: Email or Nepal phone format (+977-98XXXXXXXX)
+- **MFA code**: 6 digits
+- **IDs**: Must be valid UUIDs or Prisma string IDs
+- **Pagination**: `page` and `limit` query parameters
+- **Filtering**: By gymId, status, memberId, etc.
+- **Sorting**: `sortBy` and `sortOrder` query parameters
+
+## Response Formats
+
+### Success Response
+```json
+{
+  "success": true,
+  "data": { ... },
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 100
+  }
+}
+```
+
+### Error Response
+```json
+{
+  "success": false,
+  "error": {
+    "code": "validation_error" | "invalid_credentials" | "unauthorized" | "forbidden",
+    "message": "Human-readable error message",
+    "details": { ... }
+  }
+}
+```
+
+### Validation Error Details
+```json
+{
+  "field": "email",
+  "message": "Invalid email format",
+  "code": "invalid_format"
+}
+```
+
+## Cross-Cutting Concerns
+
+### Rate Limiting
+
+| Kind | Per IP | Per Account+IP | Per Account |
+|------|--------|----------------|-------------|
+| User login | 30 | 5 | 50 |
+| Admin login | 15 | 5 | 20 |
+
+### Session Management
+
+- User sessions: 30 days absolute, 7 days idle timeout
+- Admin sessions: 12 hours absolute, 30 minutes idle timeout
+- Device cookies signed for trusted browser identification
+- Sessions revoked on logout
+
+### Authentication Middleware
+
+- All API routes validate session cookie (`gp_session` or `gp_admin`)
+- 401 returned if no valid session
+- 403 returned if session exists but insufficient permissions
+- MFA-verified sessions checked for MFA-protected routes
+
+### CSRF Protection
+
+- Next.js form protection (hidden tokens in forms)
+- Cookie-based sessions with SameSite=lax
+- Rate limiting prevents brute-force attacks
+
+### Data Filtering
+
+- All user data filtered by `gymId` in Prisma queries
+- Platform admins can override with explicit `gymId` or operate globally
+- Member-scoped operations respect user's gym assignment

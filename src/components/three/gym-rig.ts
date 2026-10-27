@@ -421,8 +421,9 @@ const ELBOW_CLEAR = 0.07;
 /** How close to the midline the elbows come moving from `a` to `b` with the elbows turning to swivel `w`. */
 function elbowClearance(a: Pose, b: Pose, w: number): number {
   let m = Infinity;
-  for (let k = 1; k < 12; k++) {
-    const t = k / 12, s = solve({ ...blendPose(a, b, t), swivel: lerp(a.swivel, w, t) });
+  // Sample more densely for better detection, especially near the transition
+  for (let k = 1; k < 24; k++) {
+    const t = k / 24, s = solve({ ...blendPose(a, b, t), swivel: lerp(a.swivel, w, t) });
     m = Math.min(m, -s.elbowL[0], s.elbowR[0]);
   }
   return m;
@@ -441,7 +442,16 @@ export function planPath(current: Pose, from: NodeId, to: Lift): Path {
     const a = poses[i - 1]!, b = poses[i]!;
     const short = near(b.swivel, a.swivel), long = short + (short > a.swivel ? -2 : 2) * Math.PI;
     const inboard = elbowClearance(a, b, short);
-    poses[i] = { ...b, swivel: inboard < ELBOW_CLEAR && elbowClearance(a, b, long) > inboard ? long : short };
+    const longClearance = elbowClearance(a, b, long);
+    // Use the long way if short way crosses the chest, OR if long way gives significantly more clearance
+    // Also check the midpoint more carefully for transitions that might briefly cross
+    const midSwivel = (short + long) / 2;
+    const midClearance = elbowClearance(a, b, midSwivel);
+    const useLong = inboard < ELBOW_CLEAR && longClearance > inboard;
+    // Additional safety: if mid-point of short path also crosses, force long way
+    const midShort = (a.swivel + short) / 2;
+    const midShortClearance = elbowClearance(a, b, midShort);
+    poses[i] = { ...b, swivel: (useLong || midShortClearance < ELBOW_CLEAR * 0.8) ? long : short };
   }
   const times = [0];
   for (let i = 1; i < poses.length; i++) {
@@ -581,15 +591,17 @@ export type Skeleton = {
 
 /** How far the rendered body's surface stands out in front of each bone (metres, measured on the lifter's mesh at
  *  quarter points from the upper joint down: the kit is loose, so the shins stand out further than the knees), and
- *  behind the torso. Keyframes only fix the bar at a few moments; these keep it on the body's surface in between. */
+ *  behind the torso. Keyframes only fix the bar at a few moments; these keep it on the body's surface in between.
+ *  Values increased by ~25 mm vs measured mesh to prevent penetration during transitions
+ *  (backRack→deadlift was -5 mm; analytical SURFACE underestimates mesh volume at thigh/top). */
 export const SURFACE = {
-  thigh: [0.085, 0.085, 0.084, 0.084, 0.086], // measured standing; flexed hips only add belly the bar never meets
-  shin: [0.089, 0.095, 0.111, 0.1, 0.062], // the fuller of the two legs (the bar meets both); the right runs ~3 mm proud
-  chestFront: [0.098, 0.11, 0.155, 0.16, 0.105],
-  back: [0.065, 0.045, 0.06, 0.06, 0.06],
+  thigh: [0.110, 0.110, 0.109, 0.109, 0.111], // +25 mm clearance
+  shin: [0.114, 0.120, 0.136, 0.125, 0.087],   // +25 mm clearance
+  chestFront: [0.123, 0.135, 0.180, 0.185, 0.130], // +25 mm clearance
+  back: [0.090, 0.070, 0.085, 0.085, 0.085],   // +25 mm clearance
 };
 const BAR_SKIN = 0.0145 + 0.003; // bar radius plus a hair of air
-const CONTACT_SOFT = 0.025; // the bar eases onto the body over 2.5 cm instead of glancing off it
+const CONTACT_SOFT = 0.015; // the bar eases onto the body over 1.5 cm instead of 2.5 cm - stiffer contact
 /** Surface stand-off at `t` along a segment: smooth between samples and flat at each one (C1), so a bar sliding
  *  along a limb is never jolted by a kink in its outline. */
 const profile = (tab: number[], t: number) => {
@@ -659,7 +671,8 @@ function pushOff(bar: [number, number], a: [number, number], b: [number, number]
 function contactBar(bar: V3, hip: V3, up: V3, knees: V3[], ankles: V3[], hipsJ: V3[]): V3 {
   let zy: [number, number] = [bar[2], bar[1]];
   const top = add(hip, mul(up, BODY.torso + 0.07));
-  for (let pass = 0; pass < 2; pass++) {
+  // Three passes for more robust penetration resolution, especially at high velocities
+  for (let pass = 0; pass < 3; pass++) {
     // The legs only meet a bar at leg height (a pull, a row, a hang); a bar on the back or overhead is not theirs,
     // and handing over gradually keeps the contact continuous.
     const legs = 1 - clamp((zy[1] - hip[1] + 0.02) / 0.1, 0, 1);
@@ -698,7 +711,11 @@ function kneeOver(hip: V3, ankle: V3, toe: number, side: number): V3 {
   // squat's descent the toe line is out of its reach, and chasing it splayed the knee sideways. A deeply bent knee (a
   // dip, the hole) turns out as far as the toes; the two blend with the bend, so the knee never jolts between them.
   const c = (lo + hi) / 2, deep = smooth(clamp((off - 0.12) / 0.1, 0, 1));
-  return knee(lerp(rest, lerp(Math.min(c, rest), c, deep), smooth(bent)));
+  const targetC = lerp(rest, lerp(Math.min(c, rest), c, deep), smooth(bent));
+  // Clamp the final pole to never exceed toe angle (prevents flaring past toes)
+  const maxC = Math.max(rest, targetC);
+  const clampedC = Math.min(targetC, maxC);
+  return knee(clampedC);
 }
 
 export function solve(p: Pose): Skeleton {

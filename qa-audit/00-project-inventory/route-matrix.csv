@@ -1,0 +1,107 @@
+# GymPulse Route Matrix
+
+## Public Routes (No Authentication Required)
+
+| Route | Description | Tested |
+|-------|-------------|--------|
+| `/` | Landing page - main marketing page with hero section, features, pricing, FAQs, records check | ✓ |
+| `/login` | User login page - shows sign-in form, Google button, forgot password link | ✓ |
+| `/super-admin/login` | Platform admin login page - shows admin sign-in form | ✓ |
+| `/signup` | Create new gym - onboarding flow with plan selection | ✓ |
+| `/forgot-password` | Password reset request - email/phone-based reset request | ✓ |
+| `/reset-password` | Choose new password - with token from reset link | ✓ |
+
+## User Authentication Routes
+
+| Route | Description | Auth Status |
+|-------|-------------|-------------|
+| `/app` | Main application dashboard - redirects based on user role | ✓ |
+| `/app/security` | MFA enrollment / password reset setup | ✓ (conditional) |
+| `/app/security?enroll=1` | MFA enrollment page | ✓ |
+| `/app/security?reset=1` | Password reset page | ✓ |
+
+## Super-Admin Routes
+
+| Route | Description | Auth Status |
+|-------|-------------|-------------|
+| `/super-admin/login` | Platform admin login | ✓ |
+| `/super-admin/(console)` | Admin console dashboard | ✓ (super@gympulse.local) |
+| `/super-admin/(console)/analytics` | Analytics dashboard | ✓ |
+| `/super-admin/(console)/flags` | Feature flags management | ✓ |
+| `/super-admin/(console)/reports` | Reports management | ✓ |
+| `/super-admin/(console)/subscriptions` | Subscription management | ✓ |
+| `/super-admin/(console)/members` | Member management | ✓ |
+| `/super-admin/(console)/audit` | Audit log viewing | ✓ |
+| `/super-admin/(console)/support` | Support ticket management | ✓ |
+| `/super-admin/(console)/system` | System configuration | ✓ |
+| `/super-admin/(console)/settings` | Platform settings | ✓ |
+| `/super-admin/(console)/gyms` | Gym management | ✓ |
+| `/super-admin/(console)/gyms/[id]` | Individual gym detail | ✓ |
+| `/super-admin/(console)/notifications` | Notification management | ✓ |
+| `/super-admin/(console)/content` | Content management | ✓ |
+
+## Gym-Level Routes (Requires User Auth)
+
+| Route | Description | Roles |
+|-------|-------------|-------|
+| `/app` | Main application entry point | All authenticated users |
+| `/app/pulse` | Main gym dashboard/widgets | All authenticated |
+| `/app/attendance` | Check-in and attendance tracking | Staff, Trainer, Manager, Owner |
+| `/app/checkin/[token]` | QR code check-in | All authenticated |
+| `/app/members` | Member management | Manager, Owner, Staff |
+| `/app/members/[id]` | Individual member profile | Manager, Owner, Staff, Trainer (assigned) |
+| `/app/marketplace` | Marketplace (PT packs, merch, supplements) | All authenticated |
+| `/app/marketplace/[id]` | Individual product detail | All authenticated |
+| `/app/reports` | Reports and analytics | Manager, Owner |
+| `/app/forecast` | Churn prediction and forecasting | Manager, Owner |
+| `/app/imports` | CSV import and record processing | Manager, Owner |
+| `/app/settings` | Gym settings and configuration | Manager, Owner |
+| `/app/settings/staff` | Staff account management | Owner, Manager |
+| `/app/security` | Security and MFA setup | Owner, Manager (if allowed) |
+| `/app/onboarding` | Onboarding flow steps | New gym owners |
+| `/app/forecast` | Revenue risk forecasting | Manager, Owner |
+| `/app/renew` | Membership renewals | Manager, Owner |
+| `/app/renewals-due` | Members with renewals due | Manager, Owner |
+| `/app/kiosk` | Kiosk mode for check-in | All authenticated |
+| `/app/legal/terms` | Terms of service | Public |
+| `/app/legal/privacy` | Privacy policy | Public |
+| `/app/legal/refund` | Refund policy | Public |
+| `/app/legal/marketplace_terms` | Marketplace terms | Public |
+
+## API Routes (Internal)
+
+| Route Pattern | Description | Auth |
+|---------------|-------------|------|
+| `/api/auth/login` | User login API | Public (with rate limiting) |
+| `/api/auth/mfa/verify` | MFA verification API | User session |
+| `/api/auth/signup` | Gym signup API | Public |
+| `/api/auth/password/forgot` | Password reset request API | Public |
+| `/api/auth/password/reset` | Password reset with token API | Public token |
+| `/api/admin/auth/login` | Admin login API | Public |
+| `/api/admin/auth/mfa/verify` | Admin MFA verification API | Admin session |
+| `/api/*` | All other API endpoints (members, attendance, payments, etc.) | Requires valid session |
+
+## Cross-Route Access Control
+
+### Protected Page Behavior
+
+1. **Unauthenticated access**: Any route under `/app/` or `/super-admin/` redirects to `/login` or `/super-admin/login` respectively
+2. **MFA-required pages**: Users with `mfaEnabled=true` and `!mfaEnabled` are redirected to `/login/mfa`
+3. **Pending setup**: Users with pending MFA enrollment or password reset are redirected to security setup pages
+4. **Gym-scoped routes**: User roles can only access routes within their gym's context
+5. **Platform admin routes**: `/super-admin/` routes are separate from `/app/` routes
+
+### Redirect Logic (from page-auth.ts)
+
+- `pageSession()` - Core session check, redirects to `/login` if no valid session
+- `requireStaff(permission)` - Redirects to `/app/forbidden` if staff permission missing
+- `requireMember()` - Redirects to `/app` if no member context
+- `requireAdmin(permission)` - Redirects to `/super-admin/login` if no admin session
+- `appMode()` - Determines user kind: staff, member, vendor, or none
+
+### Route Guards
+
+- Next.js middleware or page-level `async` data fetching handles most redirects
+- Server components check session before rendering
+- Client-side navigation respects auth state
+- API routes validate session and return 401/403 as appropriate

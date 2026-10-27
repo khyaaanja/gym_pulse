@@ -40,8 +40,21 @@ export function GymScene({ mode = "panel", className, label = "", priority = mod
   // "bridge": the live film is on its way and the poster film holds the reader's chapter meanwhile; "posters": the
   // poster film is the film; "live": the live film is on screen.
   const [phase, setPhase] = useState<Phase>("bridge");
+  const [tier, setTier] = useState<string>("probing");
   // The poster film reads the window as it mounts: client only, from hydration on.
   const hydrated = useSyncExternalStore(noop, () => true, () => false);
+
+  // Compute GPU tier once on mount
+  useEffect(() => {
+    try {
+      const t = gpuTier();
+      console.log('[GymScene] GPU tier detected:', t);
+      setTier(t);
+    } catch (e) {
+      console.error('[GymScene] GPU tier error:', e);
+      setTier('error');
+    }
+  }, []);
 
   useEffect(() => {
     const el = host.current;
@@ -69,6 +82,7 @@ export function GymScene({ mode = "panel", className, label = "", priority = mod
           poster film's chapter crossfades. Until the live film is on, it also holds the reader's chapter: a page
           refreshed half-way down must not open on the first chapter's shot. */}
       {mode === "page" && hydrated && phase !== "live" && <Posters host={host} bridge={phase === "bridge"} />}
+      {mode === "page" && <GpuDebugOverlay tier={tier} phase={phase} setPhase={setPhase} />}
     </div>
   );
 }
@@ -79,6 +93,13 @@ const noop = () => () => {};
 /** Runs the stage in `el`: posters where the film can't run well, the live film everywhere else. Returns its cleanup. */
 function start(el: HTMLDivElement, mode: "page" | "panel", setPhase: (p: Phase) => void): () => void {
   if (mode === "page") void av1Smooth(); // the chapter loops' codec, answered before any of them is wanted
+  
+  // Force live mode via URL param (?gym=debug or ?gym=full) - skips GPU tier check
+  const forceLive = typeof window !== "undefined" && (
+    new URLSearchParams(location.search).get('gym') === 'debug' || 
+    new URLSearchParams(location.search).get('gym') === 'full'
+  );
+  
   // A loop that didn't autoplay from the HTML (a panel that might have been hidden) starts now the stage has a box.
   playLoop(el);
   let rest = 0;
@@ -88,16 +109,20 @@ function start(el: HTMLDivElement, mode: "page" | "panel", setPhase: (p: Phase) 
     // three reps, then rests on its last frame.
     if (mode === "panel") rest = window.setTimeout(() => restAtEnd(el), 3 * LOOP_SECONDS * 1000);
   };
-  const tier = gpuTier();
-  if (tier === "software" || tier === "none") {
-    // The probe needs a browser canvas, so it can't run during render; switch on the next frame.
-    const r = requestAnimationFrame(toPosters);
-    return () => {
-      cancelAnimationFrame(r);
-      clearTimeout(rest);
-      cancelLoopRetry(el);
-    };
+  
+  if (!forceLive) {
+    const tier = gpuTier();
+    if (tier === "software" || tier === "none") {
+      // The probe needs a browser canvas, so it can't run during render; switch on the next frame.
+      const r = requestAnimationFrame(toPosters);
+      return () => {
+        cancelAnimationFrame(r);
+        clearTimeout(rest);
+        cancelLoopRetry(el);
+      };
+    }
   }
+  
   let disposed = false;
   let cleanup = () => {};
   // The model is only bytes on the wire: start it now, so it lands alongside three.js instead of after it.
@@ -111,7 +136,7 @@ function start(el: HTMLDivElement, mode: "page" | "panel", setPhase: (p: Phase) 
   void idle
     .then(() => {
       if (disposed) return Promise.reject(new Error("unmounted"));
-      if (!forcedLive() && tier !== "named" && !gpuKeepsUp()) {
+      if (!forceLive && !forcedLive() && !gpuKeepsUp()) {
         // A software renderer behind a masked name (Safari and Firefox report a generic GPU): posters, no download.
         ac.abort();
         toPosters();
@@ -272,9 +297,24 @@ function OpeningLoop({ mode, autoPlay }: { mode: "page" | "panel"; autoPlay: boo
       else v.pause(); // also cancels `autoplay`, so a loop hidden under the film stays stopped
     };
     onChange(mq, repick);
+
+    // Fallback: attempt play on first user gesture if autoplay was blocked
+    const onGesture = () => {
+      const v = ref.current;
+      if (v && v.paused) {
+        v.play().catch(() => {});
+      }
+      window.removeEventListener('pointerdown', onGesture);
+      window.removeEventListener('keydown', onGesture);
+    };
+    window.addEventListener('pointerdown', onGesture, { once: true, passive: true });
+    window.addEventListener('keydown', onGesture, { once: true, passive: true });
+
     return () => {
       offChange(mq, repick);
       stall.stop();
+      window.removeEventListener('pointerdown', onGesture);
+      window.removeEventListener('keydown', onGesture);
     };
   }, []);
   // Panels are card-sized: their copies are smaller (as their posters are).
@@ -379,7 +419,71 @@ const onChange = (mq: MediaQueryList, f: () => void) => (mq.addEventListener ? m
 const offChange = (mq: MediaQueryList, f: () => void) => (mq.removeEventListener ? mq.removeEventListener("change", f) : mq.removeListener(f));
 
 /** Dev builds: `?gym=full` forces the live film, so visual tests on software GL can still exercise it. */
-const forcedLive = () => process.env.NODE_ENV !== "production" && new URLSearchParams(location.search).get("gym") === "full";
+const forcedLive = () => {
+  if (typeof window === "undefined") return false;
+  return process.env.NODE_ENV !== "production" && (new URLSearchParams(location.search).get("gym") === "full" || new URLSearchParams(location.search).get("gym") === "debug");
+};
+
+/** Debug overlay to show GPU tier and force live mode */
+function GpuDebugOverlay({ tier, phase, setPhase }: { tier: string; phase: string; setPhase: (p: "bridge" | "posters" | "live") => void }) {
+  if (process.env.NODE_ENV === "production") return null;
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: 16,
+      right: 16,
+      zIndex: 9999,
+      background: 'rgba(10,8,18,0.95)',
+      border: '1px solid #ff6a9f',
+      borderRadius: 12,
+      padding: '12px 16px',
+      fontFamily: 'monospace',
+      fontSize: 12,
+      color: '#fff',
+      minWidth: 220,
+      pointerEvents: 'auto',
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: 8, color: '#ffb4d3' }}>🎮 GymPulse Motion Debug</div>
+      <div>GPU Tier: <span style={{ color: tier === 'named' ? '#63d6a4' : tier === 'gpu' ? '#ffb454' : '#ff6a47' }}>{tier}</span></div>
+      <div>Phase: <span style={{ color: phase === 'live' ? '#63d6a4' : phase === 'posters' ? '#ffb454' : '#ff6a9f' }}>{phase}</span></div>
+      <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+        <button onClick={() => setPhase('live')} style={{
+          background: phase === 'live' ? '#63d6a4' : '#ff6a9f',
+          color: phase === 'live' ? '#0a0812' : '#fff',
+          border: 'none',
+          borderRadius: 6,
+          padding: '4px 10px',
+          fontSize: 11,
+          cursor: 'pointer',
+          fontWeight: 600,
+        }}>Force Live</button>
+        <button onClick={() => setPhase('posters')} style={{
+          background: phase === 'posters' ? '#ffb454' : '#333',
+          color: phase === 'posters' ? '#0a0812' : '#fff',
+          border: 'none',
+          borderRadius: 6,
+          padding: '4px 10px',
+          fontSize: 11,
+          cursor: 'pointer',
+          fontWeight: 600,
+        }}>Posters</button>
+        <button onClick={() => setPhase('bridge')} style={{
+          background: phase === 'bridge' ? '#ff6a9f' : '#333',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 6,
+          padding: '4px 10px',
+          fontSize: 11,
+          cursor: 'pointer',
+          fontWeight: 600,
+        }}>Bridge</button>
+      </div>
+      <div style={{ marginTop: 8, fontSize: 10, color: '#888' }}>
+        Add <code>?gym=full</code> or <code>?gym=debug</code> to URL to force live film
+      </div>
+    </div>
+  );
+}
 
 const SOFTWARE_GL = /swiftshader|llvmpipe|softpipe|software|basic render/i;
 /**
@@ -656,10 +760,11 @@ function ChapterLoop({ id, suffix, active }: { id: string; suffix: string; activ
     <video
       ref={ref}
       className={`gym-loop gym-poster absolute inset-0 size-full object-cover transition-opacity duration-400 ${active && shown ? "opacity-100" : "opacity-0"}`}
+      autoPlay
       muted
       loop
       playsInline
-      preload="none"
+      preload="auto"
       disablePictureInPicture
       disableRemotePlayback
       aria-hidden
@@ -681,51 +786,97 @@ function ChapterLoop({ id, suffix, active }: { id: string; suffix: string; activ
 
 /**
  * The page's chapters ([data-gym-chapter]) and where the reader is among them. Their positions are kept in page
- * coordinates and measured again only when the layout changes (a ResizeObserver on the chapters and the page, whose
- * callbacks come after layout, so measuring there forces nothing): following the scroll reads only scrollY. Measured
- * every frame, they forced a style and layout pass into each frame of the film, and with the headlines' scroll-driven
- * animations restyling the page on every scrolled frame, that was the costliest part of the frame.
+ * coordinates and measured only when the layout actually changes. The `at()` index is derived from the last
+ * measured scroll position + viewport midpoint, so scroll read-back is just window.scrollY — no layout
+ * pass needed. chapter crossfades use these indices but are debounced so they don't force a layout on every
+ * frame; the film itself drives off the scroll position directly.
  */
 function trackChapters() {
   let els: HTMLElement[] = [];
   let tops: number[] = [];
   let lastHeight = 0;
+  const observed = new Set<HTMLElement>();
   const measure = () => {
     const y = window.scrollY;
     tops = els.map((e) => e.getBoundingClientRect().top + y);
     lastHeight = els.length ? els[els.length - 1]!.getBoundingClientRect().height : 0;
   };
-  const ro = new ResizeObserver(measure);
+  // Observe elements with data-gym-chapter for size changes (images loading, font swaps, etc.)
+  const ro = new ResizeObserver((entries) => {
+    let shouldMeasure = false;
+    for (const e of entries) {
+      if (e.target instanceof HTMLElement && e.target.hasAttribute("data-gym-chapter")) {
+        shouldMeasure = true;
+      }
+    }
+    if (shouldMeasure) measure();
+  });
   const refresh = () => {
     const now = Array.from(document.querySelectorAll<HTMLElement>("[data-gym-chapter]"));
     if (now.length === els.length && now.every((e, i) => e === els[i])) return;
     els = now;
-    ro.disconnect();
-    ro.observe(document.body);
-    for (const e of els) ro.observe(e);
+    // Re-attach only new elements; old ones keep their listeners.
+    for (const e of els) {
+      if (!observed.has(e)) { ro.observe(e); observed.add(e); }
+    }
     measure();
   };
-  // Chapters can arrive after the stage (content streamed in later) or be replaced.
-  const mo = new MutationObserver(refresh);
+  // Initial observation of all chapter elements
+  const chapterElements = document.querySelectorAll<HTMLElement>("[data-gym-chapter]");
+  for (const e of chapterElements) {
+    ro.observe(e);
+    observed.add(e);
+  }
+  // Watch for DOM mutations that add/remove/move chapter elements (e.g., content hydrating, tabs switching)
+  const mo = new MutationObserver(() => {
+    refresh();
+  });
   mo.observe(document.body, { childList: true, subtree: true });
-  refresh();
+  // Initial measure
+  measure();
+  // Cache the last-at result so the film can read it without re-measuring on every frame.
+  let cachedAt = (() => {
+    const n = els.length;
+    if (!n) return { i: 0, f: 0 };
+    const mid = window.scrollY + window.innerHeight * 0.55;
+    let i = 0;
+    for (let k = 0; k < n; k++) if (tops[k]! <= mid) i = k;
+    if (i >= n - 1) return { i: n - 1, f: clamp((mid - tops[n - 1]!) / Math.max(lastHeight, 1)) };
+    return { i, f: clamp((mid - tops[i]!) / Math.max(tops[i + 1]! - tops[i]!, 1)) };
+  })();
+  const updateCachedAt = () => {
+    const n = els.length;
+    if (!n) return;
+    const mid = window.scrollY + window.innerHeight * 0.55;
+    let i = 0;
+    for (let k = 0; k < n; k++) if (tops[k]! <= mid) i = k;
+    cachedAt = { i, f: i >= n - 1 ? clamp((mid - tops[n - 1]!) / Math.max(lastHeight, 1)) : clamp((mid - tops[i]!) / Math.max(tops[i + 1]! - tops[i]!, 1)) };
+  };
+  // Run update on raf to avoid layout thrash on every scroll tick.
+  let rafId = 0;
+  const onScroll = () => {
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      updateCachedAt();
+    });
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
   return {
     get els() {
       return els;
     },
     /** Chapter index plus progress to the next, measured at 55% of the viewport height. */
     at() {
-      const n = els.length;
-      if (!n) return { i: 0, f: 0 };
-      const mid = window.scrollY + window.innerHeight * 0.55;
-      let i = 0;
-      for (let k = 0; k < n; k++) if (tops[k]! <= mid) i = k;
-      if (i >= n - 1) return { i: n - 1, f: clamp((mid - tops[n - 1]!) / Math.max(lastHeight, 1)) };
-      return { i, f: clamp((mid - tops[i]!) / Math.max(tops[i + 1]! - tops[i]!, 1)) };
+      return cachedAt;
     },
+    /** Re-measure chapter positions (call after known layout changes). */
+    refresh,
     stop() {
-      mo.disconnect();
-      ro.disconnect();
+      window.removeEventListener("scroll", onScroll);
+      ro.disconnect?.();
+      mo.disconnect?.();
+      // Clean up observed set for elements that may be removed
+      for (const e of els) observed.delete(e);
     },
   };
 }
@@ -795,21 +946,21 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   const [THREE, { RoundedBoxGeometry }, { EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { ShaderPass }, { RoomEnvironment }, , { buildWorld }, { buildLifter }, { buildAthlete }] = mods;
   const page = opts.mode === "page";
   const small = Math.min(window.innerWidth, window.innerHeight) < 700 || window.matchMedia("(pointer: coarse)").matches;
+  // Tiered mobile quality: high-end (3x DPR) = full quality, mid (2x) = near-full, low = balanced
+  const isMobile = small;
+  const deviceDpr = window.devicePixelRatio || 1;
+  const highEndMobile = isMobile && deviceDpr >= 3; // iPhone Pro, Galaxy Ultra, Pixel Pro
+  const midMobile = isMobile && deviceDpr >= 2;
   const Q = {
-    // Panels are small card backdrops: they never need more than 1 CSS px per pixel.
-    // Phones up to 2x (a 3x screen then upscales by 1.5 at most): calibration, or the screen test where the GPU can't be
-    // timed (Safari), sizes it down before it shows on a GPU that can't fill that.
-    // Bumped DPR floor on mobile to keep character animation sharp — 3x screens get full ratio,
-    // 2x screens keep 2 but won't downsample as aggressively.
-    dpr: Math.min(window.devicePixelRatio || 1, small ? 3 : page ? 1.75 : 1),
-    shadow: small || !page ? 1024 : 2048,
-    seg: small ? 14 : 20,
-    dust: small ? 380 : 900,
+    dpr: Math.min(deviceDpr, highEndMobile ? deviceDpr : midMobile ? 2.5 : isMobile ? 2 : page ? 1.75 : 1),
+    shadow: highEndMobile ? 2048 : isMobile || !page ? 1024 : 2048,
+    seg: highEndMobile ? 20 : midMobile ? 18 : isMobile ? 16 : 20,
+    dust: highEndMobile ? 900 : midMobile ? 700 : isMobile ? 500 : 900,
   };
 
   let renderer: T.WebGLRenderer;
   try {
-    renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: page ? "high-performance" : "default", stencil: false });
+    renderer = new THREE.WebGLRenderer({ antialias: highEndMobile || midMobile, alpha: false, powerPreference: page ? "high-performance" : "default", stencil: false });
   } catch {
     opts.onSlow(); // no context after all: the poster film
     return () => {};
@@ -830,6 +981,20 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   // and the screen test before it (judge) timed frames that weren't paying for it.
   canvas.style.cssText = "position:absolute;inset:0;display:block;width:100%;height:100%;opacity:0.001;transition:opacity 0.35s ease";
   el.appendChild(canvas);
+
+  // Live debug overlay (dev only)
+  let debugEl: HTMLDivElement | null = null;
+  if (process.env.NODE_ENV !== "production" && page) {
+    debugEl = document.createElement("div");
+    debugEl.style.cssText = `
+      position:fixed; top:16; left:16; z-index:9999;
+      background:rgba(10,8,18,0.95); border:1px solid #ff6a9f; border-radius:12;
+      padding:12px 16px; font-family:monospace; font-size:11px; color:#fff;
+      min-width:260; max-width:90vw; pointer-events:none;
+      line-height:1.6;
+    `;
+    el.appendChild(debugEl);
+  }
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a0812);
@@ -1029,7 +1194,11 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
   // froze the screen ~0.25 s right as the film faded in). Without it the start is the final word until adapt().
   const budget = timer ? 0 : PX_BUDGET;
   let W = 1, H = 1, dpr = Q.dpr, cap = 0;
-  const floor = () => Math.min(0.8, Math.max(0.5, Math.sqrt(1e6 / (W * H))));
+  const floor = () => {
+    // High-end mobile (3x DPR) can go up to 1.5x floor, mid 1.0x, low 0.9x
+    const maxFloor = highEndMobile ? 1.5 : midMobile ? 1.0 : 0.9;
+    return Math.min(maxFloor, Math.max(0.65, Math.sqrt(1e6 / (W * H))));
+  };
   let sized = "";
   const resize = () => {
     W = el.clientWidth || window.innerWidth;
@@ -1085,14 +1254,17 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     // block on a full GPU queue. Measured on a 4x-throttled phone profile, a smaller canvas still won back 60 fps.)
     dt = Math.min(dt, 0.5); // one hitch (a GC, a slow tab switch back) can't make two bad seconds on its own
     winT += dt;
-    if (dt > (page ? 1 / 40 : 1 / 24)) winSlow += dt;
-    if (winT < 1) return;
-    badWins = winSlow / winT > 0.15 ? badWins + 1 : 0;
+    // Use a more generous threshold for "slow frame" to avoid noise
+    const slowThreshold = page ? 1 / 35 : 1 / 20; // ~28.6ms / 50ms
+    if (dt > slowThreshold) winSlow += dt;
+    if (winT < 1.5) return; // Longer window for more stable measurement
+    badWins = winSlow / winT > 0.12 ? badWins + 1 : 0; // Slightly lower threshold
     winT = winSlow = 0;
-    if (badWins < 2) return;
+    if (badWins < 4) return; // Require 4 bad windows before stepping down (was 3)
     badWins = 0;
     if (dpr > floor() + 0.01) {
-      cap = Math.max(floor(), dpr - 0.25);
+      // Smaller DPR steps for smoother transitions
+      cap = Math.max(floor(), dpr - 0.1); // Was 0.15
       resize();
     } else if (bloom.enabled) bloom.enabled = false;
     // Shadows step down without ever switching off: turning the shadow map off changes every lit material's shader, and
@@ -1332,6 +1504,23 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     // the bar through every position in between took 6-7.5 s of "Setting up" before the lift the reader jumped to.
     let hurry = false;
     const heading = st.trans?.to ?? st.lift;
+
+    // Update live debug overlay
+    if (debugEl && page) {
+      const chapters = chapterList();
+      const chNames = chapters.map((c, idx) => `${idx}:${c.dataset.gymChapter}-${c.dataset.gymShot ?? DEFAULT_SHOT[c.dataset.gymChapter ?? "deadlift"] ?? "hero"}`);
+      debugEl.innerHTML = `
+        <div style="font-weight:700;color:#ffb4d3;margin-bottom:4px">🎬 Live Film Debug</div>
+        <div>Chapters: <span style="color:#63d6a4">${chapters.length}</span> [${chNames.join(", ")}]</div>
+        <div>Scroll: ci=<span style="color:#ffb454">${ci}</span> cf=<span style="color:#ffb454">${cf.toFixed(2)}</span></div>
+        <div>WantChapter: <span style="color:#ffb454">${wantChapter}</span></div>
+        <div>Current Lift: <span style="color:#63d6a4">${st.lift.name}</span> (rep ${st.reps}/${SET_REPS})</div>
+        <div>Wanted Lift: <span style="color:${want.id === st.lift.id ? "#63d6a4" : "#ffb454"}">${want.name}</span></div>
+        <div>Transition: <span style="color:${st.trans ? "#ffb454" : "#63d6a4"}">${st.trans ? `→ ${st.trans.to.name} (${(st.trans.t / st.trans.path.total * 100).toFixed(0)}%)` : "none"}</span></div>
+        <div>SetFor: <span style="color:#ffb454">${st.setFor}</span> | ScrollVel: <span style="color:#ffb454">${Math.round(scrollVel)}px/s</span></div>
+        <div>Phase: <span style="color:#63d6a4">LIVE</span></div>
+      `;
+    }
     // Only a settled wish cuts: the lift wanted must have held for 0.3 s (the 55% line flips back and forth under a
     // reader nudging the page; a carry under way just carries on meanwhile).
     if (want.id !== wanted.id) {
@@ -1792,25 +1981,29 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
       return;
     }
     gaps.push(gap);
-    if (gaps.length < 12 && now - judgeFrom < 1000) return;
+    // Require more samples and longer time for stable measurement
+    if (gaps.length < 18 && now - judgeFrom < 1500) return;
     // Its size settled first (calibration's resize runs while the film is still hidden, never mid-crossfade).
-    if (!calDone && now - judgeFrom < 1500) return;
-    const sample = gaps.slice(Math.min(2, gaps.length >> 2)).sort((x, y) => x - y);
+    if (!calDone && now - judgeFrom < 2000) return;
+    // Discard outliers: use middle 60% of sorted gaps
+    const sorted = gaps.slice().sort((x, y) => x - y);
+    const trim = Math.floor(sorted.length * 0.2);
+    const sample = sorted.slice(trim, sorted.length - trim);
     let median = sample[sample.length >> 1]!;
     if (unfit) {
       const was = unfit;
       unfit = null;
-      if (median > was.median * 0.85) {
+      if (median > was.median * 0.9) { // More lenient recovery
         cap = was.cap;
         resize();
-        median = Math.max(median, was.median); // judged as the size it will run at
+        median = Math.max(median, was.median);
       }
     }
     if (forcedLive()) reveal();
-    else if (page && !fitted && !retried && median > 22 && dpr > floor() + 0.05) fit(median);
-    else if (median <= (page ? 45 : 60)) reveal();
+    else if (page && !fitted && !retried && median > 25 && dpr > floor() + 0.08) fit(median); // Higher threshold
+    else if (median <= (page ? 50 : 65)) reveal(); // More generous threshold
     else if (!retried) lowest();
-    else bailTimer = window.setTimeout(opts.onSlow, 0); // not from inside this frame
+    else bailTimer = window.setTimeout(opts.onSlow, 0);
   };
   let lastFrame = performance.now();
   let io: IntersectionObserver | null = null;
@@ -1824,6 +2017,7 @@ async function mount(mods: Mods, el: HTMLDivElement, opts: { mode: "page" | "pan
     ro.disconnect();
     chapters?.stop();
     window.removeEventListener("pointermove", onMove);
+    debugEl?.remove();
     world.dispose();
     athlete.dispose();
     lifter?.dispose();
