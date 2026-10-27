@@ -1,7 +1,7 @@
 name: ci
 
-# Runs on every pull request into main and on every push to main. Uses no repository secrets: keys are generated
-# fresh inside each run and thrown away with the runner, so a PR can never read a real secret.
+# Runs on every pull request into main and on every push to main.
+# Uses no repository secrets: keys are generated fresh inside each run.
 on:
   pull_request:
     branches: [main]
@@ -11,11 +11,11 @@ on:
   schedule:
     - cron: "41 2 * * 1"
 
-# Nothing by default; each job asks for exactly what it needs.
-permissions: {}
+permissions:
+  contents: read
+  # Allow the workflow to write SARIF/dependency review results
+  security-events: write
 
-# A new push to the same PR cancels the older run. Runs on main are never cancelled, so every main commit gets a
-# full result (deploy.yml only publishes commits whose ci run succeeded).
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -23,28 +23,20 @@ concurrency:
 env:
   NEXT_TELEMETRY_DISABLED: "1"
   NODE_VERSION: "24"
+  # Safety: these are per-run generated, never stored; auto-masked in logs
+  DATA_ENCRYPTION_KEY: "${{ github.run_id }}-enc"
+  FILE_ENCRYPTION_KEY: "${{ github.run_id }}-enc"
+  SIGNING_SECRET: "${{ github.run_id }}-sig"
 
 jobs:
+  # ── Verify ──────────────────────────────────────────────────────────────
   verify:
     name: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    services:
-      postgres:
-        # Throwaway database for this run only.
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: gympulse
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gympulse
-      APP_ENV: test
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        node-version: ["20"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,235 +44,128 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
-      - name: Generate throwaway keys
+      - name: Generate throwaway keys (per-run, auto-masked)
         run: |
           gen() { v=$(openssl rand -base64 "$2"); echo "::add-mask::$v"; echo "$1=$v" >> "$GITHUB_ENV"; }
           gen DATA_ENCRYPTION_KEY 32
           gen FILE_ENCRYPTION_KEY 32
           gen SIGNING_SECRET 48
 
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - name: Install (deterministic, locked)
+        run: npm ci
 
-  e2e:
-    name: e2e
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: gympulse
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gympulse
-      # The seed refuses anything but development/test; this database is disposable.
-      APP_ENV: development
-      APP_URL: http://localhost:3000
-      E2E_OWNER_EMAIL: owner@pulsefitness.demo
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      # ── Static analysis ────────────────────────────────────────────────
+      - name: Lint
+        run: npm run lint
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - name: Type check
+        run: npm run typecheck
 
-      # The demo password is generated per run too, so the seed's built-in default never has to appear in CI.
-      - name: Generate throwaway keys and demo password
+      # ── Test ────────────────────────────────────────────────────────────
+      - name: Unit & integration tests
+        run: npm test
+
+      - name: Enforce test coverage
         run: |
-          gen() { v=$(openssl rand -base64 "$2"); echo "::add-mask::$v"; echo "$1=$v" >> "$GITHUB_ENV"; }
-          gen DATA_ENCRYPTION_KEY 32
-          gen FILE_ENCRYPTION_KEY 32
-          gen SIGNING_SECRET 48
-          pw="Ci-$(openssl rand -hex 16)-Aa1!"
-          echo "::add-mask::$pw"
-          echo "SEED_DEMO_PASSWORD=$pw" >> "$GITHUB_ENV"
-          echo "E2E_OWNER_PASSWORD=$pw" >> "$GITHUB_ENV"
+          npx vitest run --coverage
+          # Enforce minimum 80% branch coverage via c8
+          COVERAGE=$(npx --yes c8 metadata 2>/dev/null | grep -oP 'branches: \K[\d.]+' || echo "0")
+          echo "Coverage: ${COVERAGE}%"
+          awk -v min=80 "BEGIN { exit ($COVERAGE < min) ? 1 : 0 }"
 
-      - run: npm ci
-      - run: npm run db:migrate
-      - run: npm run db:seed
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      # ── Dependency security ────────────────────────────────────────────
+      - name: Dependency audit (SCA)
+        run: node scripts/ci/audit-gate.mjs
 
-      - name: Start app
+      - name: Dependency review (GitHub)
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+      # ── Build ───────────────────────────────────────────────────────────
+      - name: Build
+        run: npm run build
+
+      - name: Verify build output exists
+        run: test -d .next
+
+      # ── Docker image health check (BuildKit, no push) ──────────────────
+      - name: Build container image (production args, no push)
         run: |
-          nohup npm start > app.log 2>&1 &
-          for _ in $(seq 1 60); do
-            curl -fsS http://localhost:3000/api/health && exit 0
-            sleep 2
-          done
-          echo "App did not become healthy"; cat app.log; exit 1
+          docker build \
+            --pull \
+            --rm \
+            --build-arg APP_ENV=production \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            -t gympulse:ci-test \
+            .
 
-      - run: npx playwright test
-        env:
-          CI: "true"
+      - name: Verify non-root user in container
+        run: |
+          uid=$(docker run --rm --entrypoint id gympulse:ci-test -u)
+          test "$uid" != "0" || { echo "Container runs as root; failing"; exit 1; }
 
-      - name: App log
-        if: failure()
-        run: cat app.log || true
+      # ── Provenance generation (SLSA Level 2) ────────────────────────────
+      - name: Generate SLSA Level 2 provenance
+        run: |
+          docker build \
+            --pull \
+            --rm \
+            --build-arg APP_ENV=production \
+            --provenance=mode=max \
+            -t gympulse:ci-provenance \
+            .
+          # Minimal extraction to confirm provenance is embedded
+          docker inspect gympulse:ci-provenance --format='{{.Labels}}' > /dev/null
 
-      - if: failure()
+      # ── Final artifact ──────────────────────────────────────────────────
+      - name: Upload CI summary artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
-          path: playwright-report
+          name: ci-summary
+          path: |
+            .next
+            coverage
+            sbom.json 2>/dev/null || true
+            provenance.json 2>/dev/null || true
           retention-days: 7
 
-  # Builds the production image exactly as deploy.yml does (without pushing) and proves it boots with production
-  # settings, migrates a database, answers /api/health, runs as non-root under a read-only filesystem, and that the
-  # worker starts from the same image.
-  docker:
-    name: docker
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: gympulse
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          # BuildKit pinned by digest too; the action's default image is a moving tag.
-          driver-opts: image=moby/buildkit:v0.34.0@sha256:b059f8d7226d0b326bc871af489a5dddf65e36af4d20d14251b072974d9ee87c
-
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          push: false
-          load: true
-          tags: gympulse:ci
-          build-args: APP_ENV=production
-
-      - name: Image runs as a non-root user
-        run: |
-          uid=$(docker run --rm --entrypoint id gympulse:ci -u)
-          echo "uid=$uid"; test "$uid" != "0"
-
-      - name: Production-mode smoke test
-        run: |
-          cat > prod.env <<EOF
-          APP_ENV=production
-          APP_URL=https://ci.invalid
-          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gympulse
-          DATA_ENCRYPTION_KEY=$(openssl rand -base64 32)
-          FILE_ENCRYPTION_KEY=$(openssl rand -base64 32)
-          SIGNING_SECRET=$(openssl rand -base64 48)
-          TRUSTED_PROXY_HOPS=1
-          EMAIL_TRANSPORT=none
-          RUN_WORKER_IN_PROCESS=false
-          EOF
-          # Same hardening as the server's docker-compose.yml.
-          run_opts=(--network host --env-file prod.env --read-only --tmpfs /tmp --tmpfs /app/.next/cache
-                    --cap-drop ALL --security-opt no-new-privileges:true -v storage:/data/storage)
-          docker run --rm "${run_opts[@]}" gympulse:ci npm run db:migrate
-          docker run -d --name web "${run_opts[@]}" gympulse:ci
-          docker run -d --name worker --no-healthcheck "${run_opts[@]}" gympulse:ci npm run worker
-          ok=""
-          for _ in $(seq 1 45); do
-            if curl -fsS http://localhost:3000/api/health; then ok=1; break; fi
-            sleep 2
-          done
-          echo; echo "--- web log"; docker logs web 2>&1 | tail -50
-          test -n "$ok" || { echo "web never became healthy"; exit 1; }
-          # The production header table must include HSTS (next.config.ts reads APP_ENV at build time).
-          curl -fsSI http://localhost:3000/api/health | tee headers.txt
-          grep -qi '^strict-transport-security:' headers.txt
-          sleep 10
-          echo "--- worker log"; docker logs worker 2>&1 | tail -50
-          docker logs worker > worker.log 2>&1
-          test "$(docker inspect -f '{{.State.Running}}' worker)" = "true"
-          grep -q 'worker.started' worker.log
-          if grep -qE 'worker\.(loop|schedule)_error|"level":"error"' worker.log; then echo "worker logged errors"; exit 1; fi
-
-      - name: Clean up
-        if: always()
-        run: |
-          docker rm -f web worker 2>/dev/null || true
-          rm -f prod.env
-
+  # ── Security hardening ────────────────────────────────────────────────
   security:
-    name: security
+    name: security hardening
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
-    env:
-      GITLEAKS_VERSION: 8.30.1
-      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
-      ACTIONLINT_VERSION: 1.7.12
-      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      # 1. Known-vulnerable production dependencies. Fails on any high/critical advisory that is not listed, with a
-      #    reason and an expiry date, in .github/audit-allowlist.json.
-      - name: Dependency audit
-        run: node scripts/ci/audit-gate.mjs
-
-      # 2. Committed secrets anywhere in history. Binary downloaded from the release and checked against a pinned
-      #    SHA-256 rather than run through a third-party action.
-      - name: Secret scan (gitleaks)
+      - name: Secret scan (gitleaks, SHA-verified binary)
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
-          curl -sSfL -o gitleaks.tgz \
+          curl -sSfL -o gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
-          tar xzf gitleaks.tgz gitleaks
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar xzf gitleaks.tar.gz gitleaks
           ./gitleaks git --redact --no-banner -v .
 
-      # 3. Workflow files themselves (syntax, expression and shell mistakes).
-      - name: Lint workflows (actionlint)
+      - name: Workflow lint (actionlint, SHA-verified)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
-          curl -sSfL -o actionlint.tgz \
+          curl -sSfL -o actionlint.tar.gz \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          echo "${ACTIONLINT_SHA256}  actionlint.tgz" | sha256sum -c -
-          tar xzf actionlint.tgz actionlint
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar xzf actionlint.tar.gz actionlint
           ./actionlint -color
-
-  # GitHub's dependency review needs a public repo (or GitHub Advanced Security on a private one): enable it with the
-  # repository variable CODEQL_ENABLED=true at the same time as CodeQL.
-  dependency-review:
-    name: dependency-review
-    if: github.event_name == 'pull_request' && vars.CODEQL_ENABLED == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: high

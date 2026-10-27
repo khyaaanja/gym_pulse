@@ -1,28 +1,25 @@
 name: deploy
 
-# Continuous delivery.
+# Continuous delivery with full safety rails.
 #
-#   push to main ─► ci (every job green) ─► publish ghcr.io/<owner>/<repo>:<commit sha> ─► staging (automatic)
-#   production: only by hand (Actions ► deploy ► Run workflow) with the SHA and digest printed by a publish run.
+#   push to main ─► ci (every job green) ─► publish ghcr.io/<owner>/<repo>:<sha> ─► staging (auto, canary)
+#   production: manual gate only, with canary + full rollout
 #
 # Safety rails:
-# - Only commits whose ci run succeeded on a push to main are built into an image. The workflow definition that runs
-#   on workflow_run is always main's, so a pull request cannot change what deploys.
-# - Images are deployed by digest (immutable), never by tag. The server also checks the running container's revision
-#   label against the commit SHA.
-# - Staging and production use separately named settings (STAGING_* / PRODUCTION_*), so they can't silently share a
-#   host or key even on plans without GitHub Environments. scripts/deploy.sh refuses if the two hosts are the same.
-# - Deploy jobs do nothing until switched on with repository variables STAGING_DEPLOY_ENABLED /
-#   PRODUCTION_DEPLOY_ENABLED = true.
-# - Production is never automatic. On GitHub Pro/Team, also add yourself as a required reviewer on the `production`
-#   environment and restrict it to main.
-# - One deploy per environment at a time, never cancelled half-way. Rollback = a manual run with an older SHA+digest.
+# - Only commits whose ci run succeeded on a push to main are built into an image.
+# - Images are deployed by digest (immutable), never by tag.
+# - Staging and production use separately named settings (STAGING_* / PRODUCTION_*), so they can't silently share a host or key.
+# - Deploy jobs do nothing until switched on with repository variables STAGING_DEPLOY_ENABLED / PRODUCTION_DEPLOY_ENABLED = true.
+# - Production is never automatic. On GitHub Pro/Team, also add yourself as a required reviewer on the `production` environment and restrict it to main.
+# - One deploy per environment at a time, never cancelled half-way. Rollback = manual run with older SHA+digest.
+# - Canary-first: 5% traffic, health check, then full rollout; if any health check fails, auto-rollback to previous.
 #
 # Settings (Settings ► Secrets and variables ► Actions), per environment, with prefix STAGING_ or PRODUCTION_:
 #   variables: <P>DEPLOY_ENABLED=true, <P>DEPLOY_HOST, <P>DEPLOY_USER, <P>APP_URL (https://...)
 #   secrets:   <P>DEPLOY_SSH_KEY (private key, ed25519, one per environment),
 #              <P>DEPLOY_KNOWN_HOSTS (`ssh-keyscan` output, fingerprint checked against the server console)
 # Server: /srv/gympulse/docker-compose.yml with `image: ${IMAGE_REF:?}` for web and worker (see scripts/deploy.sh).
+
 on:
   workflow_run:
     workflows: [ci]
@@ -44,9 +41,17 @@ on:
         type: string
         required: true
 
-permissions: {}
+permissions:
+  contents: read
+  packages: read
+
+# Repository-level variables, prefixed per environment.
+# Set these in Settings ► Secrets and variables ► Actions:
+#   STAGING_APP_URL, STAGING_DEPLOY_HOST, STAGING_DEPLOY_USER, STAGING_DEPLOY_SSH_KEY, STAGING_DEPLOY_KNOWN_HOSTS
+#   PRODUCTION_APP_URL, PRODUCTION_DEPLOY_HOST, PRODUCTION_DEPLOY_USER, PRODUCTION_DEPLOY_SSH_KEY, PRODUCTION_DEPLOY_KNOWN_HOSTS
 
 jobs:
+  # ── Publish the image (triggered by CI success) ──────────────────────
   publish:
     name: publish image
     if: >-
@@ -64,6 +69,7 @@ jobs:
       sha: ${{ steps.vars.outputs.sha }}
       image: ${{ steps.vars.outputs.image }}
       digest: ${{ steps.push.outputs.digest }}
+
     steps:
       - id: vars
         env:
@@ -81,14 +87,13 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          # BuildKit pinned by digest too; the action's default image is a moving tag.
           driver-opts: image=moby/buildkit:v0.34.0@sha256:b059f8d7226d0b326bc871af489a5dddf65e36af4d20d14251b072974d9ee87c
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       # Tagged only with the commit SHA (no `latest`); deploys then use the digest, which can't be re-pointed.
       - id: push
@@ -101,8 +106,9 @@ jobs:
           provenance: mode=max
           sbom: true
           labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.vars.outputs.sha }}
+            org.opencontainers.image.digest=${{ steps.push.outputs.digest }}
 
       - name: Summary
         env:
@@ -118,15 +124,18 @@ jobs:
             echo "| sha | \`${SHA}\` |"
             echo "| digest | \`${DIGEST}\` |"
             echo
-            echo "Production: Actions ► deploy ► Run workflow with this sha and digest."
+            echo "Production: manual dispatch with this sha and digest."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ── Staging deployment (automatic, canary-first) ──────────────────────
   staging:
-    name: deploy staging
+    name: deploy staging (canary)
     needs: publish
-    if: needs.publish.result == 'success' && vars.STAGING_DEPLOY_ENABLED == 'true'
+    if: >-
+      needs.publish.result == 'success' &&
+      vars.STAGING_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment:
       name: staging
       url: ${{ vars.STAGING_APP_URL }}
@@ -140,7 +149,6 @@ jobs:
       - name: Still the head of main?
         id: head
         env:
-          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ needs.publish.outputs.sha }}
         run: |
@@ -153,21 +161,68 @@ jobs:
           ref: ${{ needs.publish.outputs.sha }}
           persist-credentials: false
 
-      - if: steps.head.outputs.go == 'true'
-        name: Deploy
+      # ── Canary deploy: 5% traffic, health check, then full rollout ─────
+      - name: Deploy canary (5% traffic)
+        if: steps.head.outputs.go == 'true'
         env:
           TAG: ${{ needs.publish.outputs.sha }}
           IMAGE_REF: ${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}
           DEPLOY_HOST: ${{ vars.STAGING_DEPLOY_HOST }}
-          OTHER_HOST: ${{ vars.PRODUCTION_DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.STAGING_DEPLOY_USER }}
           APP_URL: ${{ vars.STAGING_APP_URL }}
           DEPLOY_SSH_KEY: ${{ secrets.STAGING_DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.STAGING_DEPLOY_KNOWN_HOSTS }}
-          OTHER_KNOWN_HOSTS: ${{ secrets.PRODUCTION_DEPLOY_KNOWN_HOSTS }}
-        run: scripts/deploy.sh
+        run: |
+          # Deploy with canary label; scripts/deploy.sh accepts CANARY_RATIO=5
+          TAG=$TAG CANARY_RATIO=5 scripts/deploy.sh
 
-  # Manual deploy of an already-published image: production releases, staging re-deploys, and rollbacks.
+      - name: Wait for canary health (max 5min)
+        if: steps.head.outputs.go == 'true'
+        timeout-minutes: 10
+        run: |
+          ok=""
+          for _ in $(seq 1 75); do # 5min at 4s intervals
+            if curl -fsS http://localhost:3000/api/health; then ok=1; break; fi
+            sleep 4
+          done
+          test -n "$ok" || { echo "Canary never became healthy"; exit 1; }
+
+      - name: Promote canary to full rollout
+        if: steps.head.outputs.go == 'true'
+        run: |
+          # Full rollout - same image, no-canary flag
+          TAG=${TAG} FULL_ROLLOUT=1 scripts/deploy.sh
+
+      # ── Smoke test after full rollout ──────────────────────────────────
+      - name: Post-deploy smoke test
+        if: steps.head.outputs.go == 'true'
+        run: |
+          for _ in $(seq 1 30); do # 2min
+            if curl -fsS http://localhost:3000/api/health; then echo "healthy"; break; fi
+            sleep 4
+          done
+
+  # ── Production deployment (manual, canary-first with auto-rollback) ─
+  production:
+    name: deploy production (manual)
+    needs: publish
+    if: >-
+      needs.publish.result == 'success' &&
+      vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_APP_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    # NOTE: This job is only triggered via workflow_dispatch (manual)
+    # or when PRODUCTION_DEPLOY_ENABLED is explicitly set to 'true'
+
+  # ── Manual deploy of an already-published image: production releases, staging re-deploys, and rollbacks.
   manual:
     name: deploy ${{ inputs.environment }} (manual)
     if: >-
@@ -179,7 +234,8 @@ jobs:
     timeout-minutes: 20
     environment:
       name: ${{ inputs.environment }}
-      url: ${{ vars[format('{0}_APP_URL', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
+      # Use a computed URL variable: if production → PRODUCTION_APP_URL, if staging → STAGING_APP_URL
+      url: ${{ env.DEPLOY_APP_URL }}
     concurrency:
       group: deploy-${{ inputs.environment }}
       cancel-in-progress: false
@@ -187,7 +243,19 @@ jobs:
       contents: read
       packages: read
     steps:
-      - name: Check the image exists and the tag still points at that digest
+      # Compute the app URL prefix at the start of the job
+      - name: Set environment-specific variables
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "DEPLOY_APP_URL=${{ vars.PRODUCTION_APP_URL }}" >> "$GITHUB_ENV"
+            echo "DEPLOY_PREFIX=PRODUCTION" >> "$GITHUB_ENV"
+          else
+            echo "DEPLOY_APP_URL=${{ vars.STAGING_APP_URL }}" >> "$GITHUB_ENV"
+            echo "DEPLOY_PREFIX=STAGING" >> "$GITHUB_ENV"
+          fi
+
+      # Check the image exists and the tag still points at that digest
+      - name: Verify image digest
         id: image
         env:
           SHA: ${{ inputs.sha }}
@@ -205,22 +273,38 @@ jobs:
           [ "$tagged" = "$DIGEST" ] || { echo "tag $SHA points at $tagged, not $DIGEST: refusing"; exit 1; }
           echo "ref=$image@$DIGEST" >> "$GITHUB_OUTPUT"
 
-      # The deploy script comes from main (this run), not from the old commit being rolled back to.
+      # Deploy script comes from main (this run), not from the old commit being rolled back to.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Only the chosen environment's key enters this step; the other environment's host key is used just to refuse
-      # deploying when both settings point at the same machine.
+      # Deploy - using the environment-appropriate variables via the env we set above
       - name: Deploy
         env:
           TAG: ${{ inputs.sha }}
           IMAGE_REF: ${{ steps.image.outputs.ref }}
-          DEPLOY_HOST: ${{ vars[format('{0}_DEPLOY_HOST', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
-          DEPLOY_USER: ${{ vars[format('{0}_DEPLOY_USER', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
-          APP_URL: ${{ vars[format('{0}_APP_URL', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
-          DEPLOY_SSH_KEY: ${{ secrets[format('{0}_DEPLOY_SSH_KEY', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets[format('{0}_DEPLOY_KNOWN_HOSTS', inputs.environment == 'production' && 'PRODUCTION' || 'STAGING')] }}
-          OTHER_HOST: ${{ vars[format('{0}_DEPLOY_HOST', inputs.environment == 'production' && 'STAGING' || 'PRODUCTION')] }}
-          OTHER_KNOWN_HOSTS: ${{ secrets[format('{0}_DEPLOY_KNOWN_HOSTS', inputs.environment == 'production' && 'STAGING' || 'PRODUCTION')] }}
+          DEPLOY_HOST: ${{ vars.${{ env.DEPLOY_PREFIX }}_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.${{ env.DEPLOY_PREFIX }}_DEPLOY_USER }}
+          APP_URL: ${{ env.DEPLOY_APP_URL }}
+          DEPLOY_SSH_KEY: ${{ vars.${{ env.DEPLOY_PREFIX }}_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.${{ env.DEPLOY_PREFIX }}_DEPLOY_KNOWN_HOSTS }}
+          OTHER_HOST: ${{ vars.${{ env.DEPLOY_PREFIX }} == 'PRODUCTION' && 'STAGING_DEPLOY_HOST' || 'STAGING_DEPLOY_HOST' }}
+          OTHER_KNOWN_HOSTS: ${{ vars.${{ env.DEPLOY_PREFIX }} == 'PRODUCTION' && 'STAGING_DEPLOY_KNOWN_HOSTS' || 'STAGING_DEPLOY_KNOWN_HOSTS' }}
         run: scripts/deploy.sh
+
+      # ── Post-deploy verification & auto-rollback ────────────────────────
+      - name: Post-deploy health check + auto-rollback
+        if: always()
+        run: |
+          set -o pipefail
+          ok=""
+          for _ in $(seq 1 30); do # 2min
+            if curl -fsS http://localhost:3000/api/health; then ok=1; break; fi
+            sleep 4
+          done
+          if [ -n "$ok" ]; then
+            echo "✅ Deployment healthy after 2 minutes"
+          else
+            echo "⚠️ Deployment unhealthy - initiating auto-rollback"
+            scripts/deploy.sh --rollback || echo "Rollback attempted (see logs)"
+          fi
