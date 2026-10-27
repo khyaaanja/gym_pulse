@@ -1,5 +1,5 @@
 # Base image pinned by digest; Dependabot's docker updates keep it current. The tag is for humans.
-FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
+FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS base
 WORKDIR /app
 # OpenSSL must be present when `npm ci` runs, not only at runtime: Prisma picks its engine binaries by the libssl it
 # finds at install time, and with none it ships the openssl-1.1 engines, which then don't match at runtime.
